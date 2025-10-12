@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "README.md",
+                "file": "design/concepts/All/api-spec.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "README"
+              "title": "api-spec"
             }
           }
         ]
@@ -171,6 +171,41 @@
   },
   "active": "60ccb8b74e272dda",
   "lastOpenFiles": [
-    "README.md"
+    "design/concepts/All/extract-api.md",
+    "design/concepts/All/api-spec.md",
+    "context/design/concepts/All/extract-api.md/20251012_005733.10c0fc31.md",
+    "context/design/concepts/All/extract-api.md/steps/API Specification.4c72371d.md",
+    "context/design/concepts/All/extract-api.md/steps/file.881a7fa9.md",
+    "context/design/concepts/All/extract-api.md/steps/_.f5ad9b92.md",
+    "context/src/concepts/LikertSurvey/LikertSurveyConcept.ts/20251012_005655.881a7fa9.md",
+    "context/design/concepts/LikertSurvey/generate-code.md/20251012_005612.282d016e.md",
+    "context/design/concepts/LikertSurvey/generate-code.md/steps/file.7feaaeaf.md",
+    "context/design/concepts/LikertSurvey/generate-code.md/20251012_005546.76d7a86a.md",
+    "context/design/concepts/LikertSurvey/generate-code.md/steps/augment code.1d66e09f.md",
+    "context/design/concepts/LikertSurvey/generate-code.md/steps/_.09302aeb.md",
+    "context/design/concepts/LikertSurvey/augment-spec.md/20251012_005434.e54787b1.md",
+    "context/design/concepts/LikertSurvey/augment-spec.md/steps/response.fae318af.md",
+    "context/design/concepts/LikertSurvey/augment-spec.md/20251012_005422.7195c0ba.md",
+    "context/design/concepts/LikertSurvey/augment-spec.md/steps/augment again.90fdce6e.md",
+    "context/design/concepts/LikertSurvey/augment-spec.md/steps/Concept State.a7d99db9.md",
+    "design/concepts/LikertSurvey/generate-tests.md",
+    "context/design/concepts/All/extract-api.md/20251012_001855.90fb2036.md",
+    "context/design/concepts/All/extract-api.md/steps/API Specification.a48860cb.md",
+    "context/design/concepts/All/extract-api.md/steps/response.6d76b65d.md",
+    "context/design/concepts/All/extract-api.md/20251012_001823.0cd0e2ee.md",
+    "context/design/concepts/All/extract-api.md/steps/file.43c7a5a1.md",
+    "context/design/concepts/All/extract-api.md/steps/_.636acece.md",
+    "context/design/concepts/All/extract-api.md/steps/_.3731a859.md",
+    "context/design/concepts/All/extract-api.md/steps",
+    "context/design/concepts/All/extract-api.md",
+    "context/design/concepts/All",
+    "design/concepts/All",
+    "context/design/concepts/LikertSurvey/generate-tests.md/steps",
+    "context/design/concepts/LikertSurvey/augment-spec.md/steps",
+    "src/concepts/LikertSurvey/LikertSurveyConcept.ts",
+    "src/concepts/LikertSurvey/LikertSurveyConcept.old.ts",
+    "src/concepts/LikertSurvey/LikertSurveyConcept.new.test.ts",
+    "context/design/api/extract-api.md/steps",
+    "context/design/api"
   ]
 }

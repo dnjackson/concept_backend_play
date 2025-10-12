@@ -1,308 +1,556 @@
-import { assertEquals, assertExists, assertNotEquals } from "jsr:@std/assert";
+import { assert, assertEquals, assertExists } from "jsr:@std/assert";
 import { testDb } from "@utils/database.ts";
 import { ID } from "@utils/types.ts";
 import LikertSurveyConcept from "./LikertSurveyConcept.ts";
 
-const authorA = "author:Alice" as ID;
-const respondentB = "respondent:Bob" as ID;
-const respondentC = "respondent:Charlie" as ID;
+// Mock IDs for testing
+const userAlice = "user:Alice" as ID;
+const userBob = "user:Bob" as ID;
+const userCharlie = "user:Charlie" as ID;
 
-Deno.test("Principle: Author creates survey, respondent answers, author views results", async () => {
-  const [db, client] = await testDb();
-  const surveyConcept = new LikertSurveyConcept(db);
-
-  try {
-    // 1. Author creates a survey with a 1-5 scale
-    const createSurveyResult = await surveyConcept.createSurvey({
-      author: authorA,
-      title: "Customer Satisfaction",
-      scaleMin: 1,
-      scaleMax: 5,
+Deno.test("LikertSurveyConcept Actions", async (t) => {
+  await t.step("createSurvey: creates a survey successfully", async () => {
+    console.log("Testing: createSurvey success case");
+    const [db, client] = await testDb();
+    const likert = new LikertSurveyConcept(db);
+    const result = await likert.createSurvey({
+      title: "Customer Feedback",
+      owner: userAlice,
     });
-    assertNotEquals(
-      "error" in createSurveyResult,
-      true,
-      "Survey creation should not fail.",
-    );
-    const { survey } = createSurveyResult as { survey: ID };
-    assertExists(survey);
 
-    // 2. Author adds several questions
-    const addQ1Result = await surveyConcept.addQuestion({
-      survey,
-      text: "How satisfied are you with our product?",
-    });
-    assertNotEquals(
-      "error" in addQ1Result,
-      true,
-      "Adding question 1 should not fail.",
+    assert(
+      !("error" in result),
+      `createSurvey should not return an error, but got: ${
+        "error" in result && result.error
+      }`,
     );
-    const { question: q1 } = addQ1Result as { question: ID };
+    assertExists(result.survey);
+    console.log(`  - Created survey with ID: ${result.survey}`);
 
-    const addQ2Result = await surveyConcept.addQuestion({
-      survey,
-      text: "How likely are you to recommend us?",
-    });
-    assertNotEquals(
-      "error" in addQ2Result,
-      true,
-      "Adding question 2 should not fail.",
-    );
-    const { question: q2 } = addQ2Result as { question: ID };
+    const surveyDoc = await likert.surveys.findOne({ _id: result.survey });
+    assertExists(surveyDoc);
+    assertEquals(surveyDoc.title, "Customer Feedback");
+    assertEquals(surveyDoc.owner, userAlice);
+    console.log("  - Verified survey document in database");
 
-    const questions = await surveyConcept._getSurveyQuestions({ survey });
-    assertEquals(
-      questions.length,
-      2,
-      "There should be two questions in the survey.",
-    );
-
-    // 3. A respondent submits their answers to those questions
-    const submitR1Result = await surveyConcept.submitResponse({
-      respondent: respondentB,
-      question: q1,
-      value: 5,
-    });
-    assertEquals(
-      "error" in submitR1Result,
-      false,
-      "Submitting response 1 should succeed.",
-    );
-
-    const submitR2Result = await surveyConcept.submitResponse({
-      respondent: respondentB,
-      question: q2,
-      value: 4,
-    });
-    assertEquals(
-      "error" in submitR2Result,
-      false,
-      "Submitting response 2 should succeed.",
-    );
-
-    // 4. The author can view the collected responses
-    const surveyResponses = await surveyConcept._getSurveyResponses({ survey });
-    assertEquals(
-      surveyResponses.length,
-      2,
-      "There should be two responses for the survey.",
-    );
-    assertEquals(surveyResponses.find((r) => r.question === q1)?.value, 5);
-    assertEquals(surveyResponses.find((r) => r.question === q2)?.value, 4);
-
-    const respondentAnswers = await surveyConcept._getRespondentAnswers({
-      respondent: respondentB,
-    });
-    assertEquals(
-      respondentAnswers.length,
-      2,
-      "The respondent should have two answers recorded.",
-    );
-  } finally {
     await client.close();
-  }
-});
+  });
 
-Deno.test("Action: createSurvey requires scaleMin < scaleMax", async () => {
-  const [db, client] = await testDb();
-  const surveyConcept = new LikertSurveyConcept(db);
-
-  try {
-    const invalidResult = await surveyConcept.createSurvey({
-      author: authorA,
-      title: "Invalid Survey",
-      scaleMin: 5,
-      scaleMax: 1,
-    });
-    assertEquals(
-      "error" in invalidResult,
-      true,
-      "Should fail when scaleMin > scaleMax.",
-    );
-
-    const equalResult = await surveyConcept.createSurvey({
-      author: authorA,
-      title: "Invalid Survey",
-      scaleMin: 3,
-      scaleMax: 3,
-    });
-    assertEquals(
-      "error" in equalResult,
-      true,
-      "Should fail when scaleMin == scaleMax.",
-    );
-  } finally {
-    await client.close();
-  }
-});
-
-Deno.test("Action: addQuestion requires an existing survey", async () => {
-  const [db, client] = await testDb();
-  const surveyConcept = new LikertSurveyConcept(db);
-  const nonExistentSurveyId = "survey:fake" as ID;
-
-  try {
-    const result = await surveyConcept.addQuestion({
-      survey: nonExistentSurveyId,
-      text: "This will fail",
-    });
-    assertEquals(
+  await t.step("createSurvey: fails with empty title", async () => {
+    console.log("Testing: createSurvey requires non-empty title");
+    const [db, client] = await testDb();
+    const likert = new LikertSurveyConcept(db);
+    const result = await likert.createSurvey({ title: "", owner: userAlice });
+    assert(
       "error" in result,
-      true,
-      "Adding a question to a non-existent survey should fail.",
+      "createSurvey should have returned an error for empty title",
     );
-  } finally {
+    assertEquals(result.error, "Survey title cannot be empty.");
+    console.log("  - Confirmed error for empty title");
     await client.close();
-  }
+  });
+
+  await t.step(
+    "addQuestion: adds a question to an existing survey",
+    async () => {
+      console.log("Testing: addQuestion success case");
+      const [db, client] = await testDb();
+      const likert = new LikertSurveyConcept(db);
+      const surveyRes = await likert.createSurvey({
+        title: "Team Morale",
+        owner: userBob,
+      });
+      assert(!("error" in surveyRes), "createSurvey failed during test setup");
+      console.log(`  - Created survey: ${surveyRes.survey}`);
+
+      const questionRes = await likert.addQuestion({
+        stem: "How is the work-life balance?",
+        survey: surveyRes.survey,
+      });
+      assert(!("error" in questionRes), "addQuestion failed");
+      console.log(`  - Added question: ${questionRes.question}`);
+
+      const questionDoc = await likert.questions.findOne({
+        _id: questionRes.question,
+      });
+      assertExists(questionDoc);
+      assertEquals(questionDoc.stem, "How is the work-life balance?");
+      assertEquals(questionDoc.survey, surveyRes.survey);
+      console.log("  - Verified question document in database");
+
+      await client.close();
+    },
+  );
+
+  await t.step("addQuestion: fails with non-existent survey", async () => {
+    console.log("Testing: addQuestion requires survey to exist");
+    const [db, client] = await testDb();
+    const likert = new LikertSurveyConcept(db);
+    const fakeSurveyId = "survey:fake" as ID;
+    const result = await likert.addQuestion({
+      stem: "A valid question",
+      survey: fakeSurveyId,
+    });
+    assert(
+      "error" in result,
+      "addQuestion should have returned an error for a non-existent survey",
+    );
+    assertEquals(result.error, "Survey not found.");
+    console.log("  - Confirmed error for non-existent survey");
+    await client.close();
+  });
+
+  await t.step(
+    "removeQuestion: removes a question and its responses",
+    async () => {
+      console.log(
+        "Testing: removeQuestion effects (removes question and responses)",
+      );
+      const [db, client] = await testDb();
+      const likert = new LikertSurveyConcept(db);
+
+      const surveyRes = await likert.createSurvey({
+        title: "Test Survey",
+        owner: userAlice,
+      });
+      assert(!("error" in surveyRes));
+      const { survey } = surveyRes;
+
+      const questionRes = await likert.addQuestion({
+        stem: "Test Question",
+        survey,
+      });
+      assert(!("error" in questionRes));
+      const { question } = questionRes;
+
+      await likert.respondToQuestion({
+        question,
+        responder: userBob,
+        choice: 4,
+      });
+      console.log(
+        `  - Setup: created survey, question ${question}, and a response.`,
+      );
+
+      let questionDoc = await likert.questions.findOne({ _id: question });
+      let responses = await likert.responses.find({ question }).toArray();
+      assertExists(questionDoc);
+      assertEquals(responses.length, 1);
+      console.log("  - Verified setup state is correct.");
+
+      const result = await likert.removeQuestion({ question });
+      assert(!("error" in result), "removeQuestion should not return an error");
+      assertEquals(result, {});
+      console.log("  - Executed removeQuestion action successfully.");
+
+      questionDoc = await likert.questions.findOne({ _id: question });
+      responses = await likert.responses.find({ question }).toArray();
+      assertEquals(questionDoc, null);
+      assertEquals(responses.length, 0);
+      console.log(
+        "  - Verified question and associated responses were deleted.",
+      );
+
+      await client.close();
+    },
+  );
+
+  await t.step(
+    "respondToQuestion: creates and overwrites a response",
+    async () => {
+      console.log("Testing: respondToQuestion effects (create and overwrite)");
+      const [db, client] = await testDb();
+      const likert = new LikertSurveyConcept(db);
+
+      const surveyRes = await likert.createSurvey({
+        title: "Product Feedback",
+        owner: userAlice,
+      });
+      assert(!("error" in surveyRes));
+      const { survey } = surveyRes;
+
+      const questionRes = await likert.addQuestion({
+        stem: "Rate our new feature",
+        survey,
+      });
+      assert(!("error" in questionRes));
+      const { question } = questionRes;
+      console.log(`  - Setup: created survey and question ${question}.`);
+
+      const res1 = await likert.respondToQuestion({
+        question,
+        responder: userCharlie,
+        choice: 3,
+      });
+      assert(!("error" in res1), "First respondToQuestion call failed");
+      let responseDoc = await likert.responses.findOne({
+        question,
+        responder: userCharlie,
+      });
+      assertExists(responseDoc);
+      assertEquals(responseDoc.choice, 3);
+      console.log(
+        "  - User Charlie responded with choice 3, response created.",
+      );
+
+      const res2 = await likert.respondToQuestion({
+        question,
+        responder: userCharlie,
+        choice: 5,
+      });
+      assert(!("error" in res2), "Second respondToQuestion call failed");
+      responseDoc = await likert.responses.findOne({
+        question,
+        responder: userCharlie,
+      });
+      assertExists(responseDoc);
+      assertEquals(responseDoc.choice, 5);
+      const count = await likert.responses.countDocuments({
+        question,
+        responder: userCharlie,
+      });
+      assertEquals(count, 1);
+      console.log(
+        "  - User Charlie changed response to 5, old response was overwritten.",
+      );
+
+      await client.close();
+    },
+  );
+
+  await t.step("respondToQuestion: fails with invalid choice", async () => {
+    console.log(
+      "Testing: respondToQuestion requires valid choice (1-5 integer)",
+    );
+    const [db, client] = await testDb();
+    const likert = new LikertSurveyConcept(db);
+
+    const surveyRes = await likert.createSurvey({
+      title: "Service Quality",
+      owner: userAlice,
+    });
+    assert(!("error" in surveyRes));
+    const { survey } = surveyRes;
+
+    const questionRes = await likert.addQuestion({
+      stem: "How was our service?",
+      survey,
+    });
+    assert(!("error" in questionRes));
+    const { question } = questionRes;
+    console.log("  - Setup complete.");
+
+    const result1 = await likert.respondToQuestion({
+      question,
+      responder: userBob,
+      choice: 0,
+    });
+    assertEquals(result1.error, "Choice must be an integer between 1 and 5.");
+    console.log("  - Confirmed error for choice < 1.");
+
+    const result2 = await likert.respondToQuestion({
+      question,
+      responder: userBob,
+      choice: 6,
+    });
+    assertEquals(result2.error, "Choice must be an integer between 1 and 5.");
+    console.log("  - Confirmed error for choice > 5.");
+
+    const result3 = await likert.respondToQuestion({
+      question,
+      responder: userBob,
+      choice: 3.5,
+    });
+    assertEquals(result3.error, "Choice must be an integer between 1 and 5.");
+    console.log("  - Confirmed error for non-integer choice.");
+
+    await client.close();
+  });
 });
 
-Deno.test("Action: submitResponse requirements are enforced", async () => {
-  const [db, client] = await testDb();
-  const surveyConcept = new LikertSurveyConcept(db);
+Deno.test("LikertSurveyConcept Queries", async (t) => {
+  await t.step(
+    "_getQuestionResults and _getQuestionResponseCounts",
+    async () => {
+      console.log(
+        "Testing: _getQuestionResults and _getQuestionResponseCounts",
+      );
+      const [db, client] = await testDb();
+      const likert = new LikertSurveyConcept(db);
 
-  try {
-    // Setup a valid survey and question
-    const { survey } =
-      (await surveyConcept.createSurvey({
-        author: authorA,
-        title: "Test Survey",
-        scaleMin: 1,
-        scaleMax: 5,
-      })) as { survey: ID };
-    const { question } =
-      (await surveyConcept.addQuestion({ survey, text: "A question" })) as {
-        question: ID;
-      };
+      const surveyRes = await likert.createSurvey({
+        title: "Employee Satisfaction",
+        owner: userAlice,
+      });
+      assert(!("error" in surveyRes));
+      const { survey } = surveyRes;
 
-    // Requires: question must exist
-    const nonExistentQuestionId = "question:fake" as ID;
-    const res1 = await surveyConcept.submitResponse({
-      respondent: respondentB,
-      question: nonExistentQuestionId,
-      value: 3,
-    });
-    assertEquals(
-      "error" in res1,
-      true,
-      "Submitting a response to a non-existent question should fail.",
-    );
+      const questionRes = await likert.addQuestion({
+        stem: "Are you happy at work?",
+        survey,
+      });
+      assert(!("error" in questionRes));
+      const { question } = questionRes;
 
-    // Requires: respondent must not have already submitted a response
-    await surveyConcept.submitResponse({
-      respondent: respondentB,
-      question,
-      value: 3,
-    }); // First submission is OK
-    const res2 = await surveyConcept.submitResponse({
-      respondent: respondentB,
-      question,
-      value: 4,
-    }); // Second submission fails
-    assertEquals(
-      "error" in res2,
-      true,
-      "Submitting a response twice for the same question should fail.",
-    );
-    assertEquals(
-      (res2 as { error: string }).error,
-      "Respondent has already answered this question. Use updateResponse to change it.",
-    );
+      await likert.respondToQuestion({
+        question,
+        responder: userAlice,
+        choice: 5,
+      });
+      await likert.respondToQuestion({
+        question,
+        responder: userBob,
+        choice: 5,
+      });
+      await likert.respondToQuestion({
+        question,
+        responder: userCharlie,
+        choice: 1,
+      });
+      console.log(
+        "  - Setup: 2 responses with choice 5, 1 response with choice 1.",
+      );
 
-    // Requires: value must be within survey's scale
-    const res3 = await surveyConcept.submitResponse({
-      respondent: respondentC,
-      question,
-      value: 0,
-    }); // Below min
-    assertEquals(
-      "error" in res3,
-      true,
-      "Submitting a value below the minimum scale should fail.",
-    );
-    const res4 = await surveyConcept.submitResponse({
-      respondent: respondentC,
-      question,
-      value: 6,
-    }); // Above max
-    assertEquals(
-      "error" in res4,
-      true,
-      "Submitting a value above the maximum scale should fail.",
-    );
-  } finally {
-    await client.close();
-  }
+      const results = await likert._getQuestionResults({ question });
+      assertEquals(results, [{ 1: 1, 2: 0, 3: 0, 4: 0, 5: 2 }]);
+      console.log("  - Verified _getQuestionResults returns correct map.");
+
+      const counts = await likert._getQuestionResponseCounts({ question });
+      assertEquals(counts, [[1, 0, 0, 0, 2]]);
+      console.log(
+        "  - Verified _getQuestionResponseCounts returns correct array.",
+      );
+
+      await client.close();
+    },
+  );
+
+  await t.step(
+    "_analyzeSentiment: correctly identifies sentiment",
+    async () => {
+      console.log("Testing: _analyzeSentiment for all cases");
+      const [db, client] = await testDb();
+      const likert = new LikertSurveyConcept(db);
+
+      const surveyRes = await likert.createSurvey({
+        title: "Sentiment Test",
+        owner: userAlice,
+      });
+      assert(!("error" in surveyRes));
+      const { survey } = surveyRes;
+
+      // Positive case
+      const positiveQRes = await likert.addQuestion({
+        stem: "Positive Question",
+        survey,
+      });
+      assert(!("error" in positiveQRes));
+      const { question: positiveQ } = positiveQRes;
+      await likert.respondToQuestion({
+        question: positiveQ,
+        responder: userAlice,
+        choice: 5,
+      });
+      await likert.respondToQuestion({
+        question: positiveQ,
+        responder: userBob,
+        choice: 4,
+      });
+      const positiveSentiment = await likert._analyzeSentiment({
+        question: positiveQ,
+      });
+      assertEquals(positiveSentiment, [{ sentiment: "positive" }]);
+      console.log("  - Verified 'positive' sentiment.");
+
+      // Negative case
+      const negativeQRes = await likert.addQuestion({
+        stem: "Negative Question",
+        survey,
+      });
+      assert(!("error" in negativeQRes));
+      const { question: negativeQ } = negativeQRes;
+      await likert.respondToQuestion({
+        question: negativeQ,
+        responder: userAlice,
+        choice: 1,
+      });
+      await likert.respondToQuestion({
+        question: negativeQ,
+        responder: userBob,
+        choice: 2,
+      });
+      const negativeSentiment = await likert._analyzeSentiment({
+        question: negativeQ,
+      });
+      assertEquals(negativeSentiment, [{ sentiment: "negative" }]);
+      console.log("  - Verified 'negative' sentiment.");
+
+      // Bimodal case
+      const bimodalQRes = await likert.addQuestion({
+        stem: "Bimodal Question",
+        survey,
+      });
+      assert(!("error" in bimodalQRes));
+      const { question: bimodalQ } = bimodalQRes;
+      await likert.respondToQuestion({
+        question: bimodalQ,
+        responder: userAlice,
+        choice: 1,
+      });
+      await likert.respondToQuestion({
+        question: bimodalQ,
+        responder: userBob,
+        choice: 5,
+      });
+      const bimodalSentiment = await likert._analyzeSentiment({
+        question: bimodalQ,
+      });
+      assertEquals(bimodalSentiment, [{ sentiment: "bimodal" }]);
+      console.log("  - Verified 'bimodal' sentiment.");
+
+      // Mixed case
+      const mixedQRes = await likert.addQuestion({
+        stem: "Mixed Question",
+        survey,
+      });
+      assert(!("error" in mixedQRes));
+      const { question: mixedQ } = mixedQRes;
+      await likert.respondToQuestion({
+        question: mixedQ,
+        responder: userAlice,
+        choice: 2,
+      });
+      await likert.respondToQuestion({
+        question: mixedQ,
+        responder: userBob,
+        choice: 3,
+      });
+      await likert.respondToQuestion({
+        question: mixedQ,
+        responder: userCharlie,
+        choice: 4,
+      });
+      const mixedSentiment = await likert._analyzeSentiment({
+        question: mixedQ,
+      });
+      assertEquals(mixedSentiment, [{ sentiment: "mixed" }]);
+      console.log("  - Verified 'mixed' sentiment.");
+
+      // Neutral case (no responses)
+      const neutralQRes = await likert.addQuestion({
+        stem: "Neutral Question",
+        survey,
+      });
+      assert(!("error" in neutralQRes));
+      const { question: neutralQ } = neutralQRes;
+      const neutralSentiment = await likert._analyzeSentiment({
+        question: neutralQ,
+      });
+      assertEquals(neutralSentiment, [{ sentiment: "neutral" }]);
+      console.log(
+        "  - Verified 'neutral' sentiment for question with no responses.",
+      );
+
+      await client.close();
+    },
+  );
 });
 
-Deno.test("Action: updateResponse successfully updates a response and enforces requirements", async () => {
+Deno.test("Principle: Full survey lifecycle", async () => {
+  console.log(
+    "Testing Principle: If an owner creates a survey and adds questions, and several users respond, then the owner can analyze the aggregated results to understand sentiment.",
+  );
   const [db, client] = await testDb();
-  const surveyConcept = new LikertSurveyConcept(db);
-  try {
-    // Setup
-    const { survey } =
-      (await surveyConcept.createSurvey({
-        author: authorA,
-        title: "Test Survey",
-        scaleMin: 1,
-        scaleMax: 5,
-      })) as { survey: ID };
-    const { question } =
-      (await surveyConcept.addQuestion({ survey, text: "A question" })) as {
-        question: ID;
-      };
-    await surveyConcept.submitResponse({
-      respondent: respondentB,
-      question,
-      value: 3,
-    });
+  const likert = new LikertSurveyConcept(db);
 
-    // Requires: A response must already exist to be updated
-    const res1 = await surveyConcept.updateResponse({
-      respondent: respondentC,
-      question,
-      value: 4,
-    });
-    assertEquals(
-      "error" in res1,
-      true,
-      "Updating a non-existent response should fail.",
-    );
+  // 1. Owner (Alice) creates a survey.
+  console.log("  (1) Alice creates a survey about 'Canteen Food Quality'.");
+  const surveyRes = await likert.createSurvey({
+    title: "Canteen Food Quality",
+    owner: userAlice,
+  });
+  assert(
+    !("error" in surveyRes),
+    "Principle test failed: createSurvey returned an error",
+  );
+  const surveyId = surveyRes.survey;
 
-    // Requires: value must be within survey's scale
-    const res2 = await surveyConcept.updateResponse({
-      respondent: respondentB,
-      question,
-      value: 6,
-    });
-    assertEquals(
-      "error" in res2,
-      true,
-      "Updating with a value outside the scale should fail.",
-    );
+  // 2. Alice adds questions to the survey.
+  console.log("  (2) Alice adds two questions to the survey.");
+  const q1Res = await likert.addQuestion({
+    stem: "How is the food taste?",
+    survey: surveyId,
+  });
+  assert(
+    !("error" in q1Res),
+    "Principle test failed: addQuestion(q1) returned an error",
+  );
+  const q1Id = q1Res.question;
 
-    // Successful update
-    const successResult = await surveyConcept.updateResponse({
-      respondent: respondentB,
-      question,
-      value: 5,
-    });
-    assertEquals(
-      "error" in successResult,
-      false,
-      "A valid update should succeed.",
-    );
+  const q2Res = await likert.addQuestion({
+    stem: "How is the food variety?",
+    survey: surveyId,
+  });
+  assert(
+    !("error" in q2Res),
+    "Principle test failed: addQuestion(q2) returned an error",
+  );
+  const q2Id = q2Res.question;
 
-    // Verify the update
-    const answers = await surveyConcept._getRespondentAnswers({
-      respondent: respondentB,
-    });
-    assertEquals(answers.length, 1, "There should still be only one answer.");
-    assertEquals(
-      answers[0].value,
-      5,
-      "The answer's value should be updated to 5.",
-    );
-  } finally {
-    await client.close();
-  }
+  const questions = await likert._getSurveyQuestions({ survey: surveyId });
+  assertEquals(questions.length, 2);
+  console.log("      - Verified two questions were added.");
+
+  // 3. Multiple users (Bob and Charlie) respond to the questions.
+  console.log("  (3) Bob and Charlie respond to the questions.");
+  // Question 1: Taste (Positive)
+  await likert.respondToQuestion({
+    question: q1Id,
+    responder: userBob,
+    choice: 4,
+  });
+  await likert.respondToQuestion({
+    question: q1Id,
+    responder: userCharlie,
+    choice: 5,
+  });
+  console.log("      - Responses for taste (Q1): Bob (4), Charlie (5).");
+  // Question 2: Variety (Bimodal/Polarized)
+  await likert.respondToQuestion({
+    question: q2Id,
+    responder: userBob,
+    choice: 1,
+  });
+  await likert.respondToQuestion({
+    question: q2Id,
+    responder: userCharlie,
+    choice: 5,
+  });
+  console.log("      - Responses for variety (Q2): Bob (1), Charlie (5).");
+
+  // 4. Owner (Alice) analyzes the results.
+  console.log("  (4) Alice analyzes the aggregated results and sentiment.");
+
+  // Analysis for Question 1
+  const q1Results = await likert._getQuestionResults({ question: q1Id });
+  const q1Sentiment = await likert._analyzeSentiment({ question: q1Id });
+  assertEquals(q1Results, [{ 1: 0, 2: 0, 3: 0, 4: 1, 5: 1 }]);
+  assertEquals(q1Sentiment, [{ sentiment: "positive" }]);
+  console.log(
+    "      - Analysis for Q1 (Taste) shows positive sentiment, as expected.",
+  );
+
+  // Analysis for Question 2
+  const q2Results = await likert._getQuestionResults({ question: q2Id });
+  const q2Sentiment = await likert._analyzeSentiment({ question: q2Id });
+  assertEquals(q2Results, [{ 1: 1, 2: 0, 3: 0, 4: 0, 5: 1 }]);
+  assertEquals(q2Sentiment, [{ sentiment: "bimodal" }]);
+  console.log(
+    "      - Analysis for Q2 (Variety) shows bimodal sentiment, as expected.",
+  );
+
+  console.log(
+    "Principle test successful: The concept correctly models the full survey lifecycle from creation to analysis.",
+  );
+  await client.close();
 });

@@ -2,51 +2,54 @@ import { Collection, Db } from "npm:mongodb";
 import { Empty, ID } from "@utils/types.ts";
 import { freshID } from "@utils/database.ts";
 
-// Collection prefix to ensure namespace separation
 const PREFIX = "LikertSurvey" + ".";
 
-// Generic types for the concept's external dependencies
-type Author = ID;
-type Respondent = ID;
+// Generic types of this concept
+type User = ID;
 
-// Internal entity types, represented as IDs
+// Concept-specific types
 type Survey = ID;
 type Question = ID;
 type Response = ID;
 
 /**
- * State: A set of Surveys with an author, title, and scale.
+ * a set of Surveys with
+ *   a title String
+ *   an owner User
  */
 interface SurveyDoc {
   _id: Survey;
-  author: Author;
   title: string;
-  scaleMin: number;
-  scaleMax: number;
+  owner: User;
 }
 
 /**
- * State: A set of Questions, each linked to a survey and containing text.
+ * a set of Questions with
+ *   a stem String
+ *   a survey Survey
  */
 interface QuestionDoc {
   _id: Question;
+  stem: string;
   survey: Survey;
-  text: string;
 }
 
 /**
- * State: A set of Responses, linking a respondent, a question, and their chosen value.
+ * a set of Responses with
+ *   a responder User
+ *   a question Question
+ *   a choice Number
  */
 interface ResponseDoc {
   _id: Response;
-  respondent: Respondent;
+  responder: User;
   question: Question;
-  value: number;
+  choice: number;
 }
 
 /**
  * @concept LikertSurvey
- * @purpose To measure attitudes or opinions by asking respondents to rate their level of agreement with a series of statements on a predefined scale.
+ * @purpose understand group sentiment on a set of topics by aggregating quantitative feedback
  */
 export default class LikertSurveyConcept {
   surveys: Collection<SurveyDoc>;
@@ -60,180 +63,239 @@ export default class LikertSurveyConcept {
   }
 
   /**
-   * Action: Creates a new survey.
-   * @requires scaleMin must be less than scaleMax.
-   * @effects A new survey is created and its ID is returned.
+   * createSurvey (title: String, owner: User): (survey: Survey)
+   *
+   * **requires** title is non-empty
+   * **effects** creates a new `Survey` with the given title and owner and returns it
    */
   async createSurvey(
-    { author, title, scaleMin, scaleMax }: {
-      author: Author;
-      title: string;
-      scaleMin: number;
-      scaleMax: number;
-    },
+    { title, owner }: { title: string; owner: User },
   ): Promise<{ survey: Survey } | { error: string }> {
-    if (scaleMin >= scaleMax) {
-      return { error: "scaleMin must be less than scaleMax" };
+    if (!title) {
+      return { error: "Survey title cannot be empty." };
     }
 
-    const surveyId = freshID() as Survey;
-    await this.surveys.insertOne({
-      _id: surveyId,
-      author,
+    const survey: SurveyDoc = {
+      _id: freshID(),
       title,
-      scaleMin,
-      scaleMax,
-    });
-    return { survey: surveyId };
+      owner,
+    };
+    await this.surveys.insertOne(survey);
+    return { survey: survey._id };
   }
 
   /**
-   * Action: Adds a new question to an existing survey.
-   * @requires The survey must exist.
-   * @effects A new question is created and its ID is returned.
+   * addQuestion (stem: String, survey: Survey): (question: Question)
+   *
+   * **requires** stem is non-empty and survey exists
+   * **effects** creates a new `Question` with the given stem, associates it with the given survey, and returns it
    */
   async addQuestion(
-    { survey, text }: { survey: Survey; text: string },
+    { stem, survey }: { stem: string; survey: Survey },
   ): Promise<{ question: Question } | { error: string }> {
-    const existingSurvey = await this.surveys.findOne({ _id: survey });
-    if (!existingSurvey) {
-      return { error: `Survey with ID ${survey} not found.` };
+    if (!stem) {
+      return { error: "Question stem cannot be empty." };
+    }
+    const parentSurvey = await this.surveys.findOne({ _id: survey });
+    if (!parentSurvey) {
+      return { error: "Survey not found." };
     }
 
-    const questionId = freshID() as Question;
-    await this.questions.insertOne({ _id: questionId, survey, text });
-    return { question: questionId };
+    const question: QuestionDoc = {
+      _id: freshID(),
+      stem,
+      survey,
+    };
+    await this.questions.insertOne(question);
+    return { question: question._id };
   }
 
   /**
-   * Action: Submits a response to a question.
-   * @requires The question must exist.
-   * @requires The respondent must not have already responded to this question.
-   * @requires The response value must be within the survey's defined scale.
-   * @effects A new response is recorded in the state.
+   * removeQuestion (question: Question)
+   *
+   * **requires** question exists
+   * **effects** removes the specified question and all `Response` entities associated with it
    */
-  async submitResponse(
-    { respondent, question, value }: {
-      respondent: Respondent;
-      question: Question;
-      value: number;
-    },
+  async removeQuestion(
+    { question }: { question: Question },
   ): Promise<Empty | { error: string }> {
     const questionDoc = await this.questions.findOne({ _id: question });
     if (!questionDoc) {
-      return { error: `Question with ID ${question} not found.` };
+      return { error: "Question not found." };
     }
 
-    const surveyDoc = await this.surveys.findOne({ _id: questionDoc.survey });
-    if (!surveyDoc) {
-      // This indicates a data integrity issue but is a good safeguard.
-      return { error: "Associated survey for the question not found." };
-    }
-
-    if (value < surveyDoc.scaleMin || value > surveyDoc.scaleMax) {
-      return {
-        error:
-          `Response value ${value} is outside the survey's scale [${surveyDoc.scaleMin}, ${surveyDoc.scaleMax}].`,
-      };
-    }
-
-    const existingResponse = await this.responses.findOne({
-      respondent,
-      question,
-    });
-    if (existingResponse) {
-      return {
-        error:
-          "Respondent has already answered this question. Use updateResponse to change it.",
-      };
-    }
-
-    const responseId = freshID() as Response;
-    await this.responses.insertOne({
-      _id: responseId,
-      respondent,
-      question,
-      value,
-    });
+    await this.questions.deleteOne({ _id: question });
+    await this.responses.deleteMany({ question: question });
 
     return {};
   }
 
   /**
-   * Action: Updates an existing response to a question.
-   * @requires The question must exist.
-   * @requires A response from the given respondent to the question must already exist.
-   * @requires The new response value must be within the survey's defined scale.
-   * @effects The existing response's value is updated.
+   * respondToQuestion (question: Question, responder: User, choice: Number)
+   *
+   * **requires** question exists; choice is an integer between 1 and 5
+   * **effects** deletes any existing response to this question by the responder; creates a new `Response` linking the responder, question, and choice
    */
-  async updateResponse(
-    { respondent, question, value }: {
-      respondent: Respondent;
+  async respondToQuestion(
+    { question, responder, choice }: {
       question: Question;
-      value: number;
+      responder: User;
+      choice: number;
     },
   ): Promise<Empty | { error: string }> {
+    if (!Number.isInteger(choice) || choice < 1 || choice > 5) {
+      return { error: "Choice must be an integer between 1 and 5." };
+    }
     const questionDoc = await this.questions.findOne({ _id: question });
     if (!questionDoc) {
-      return { error: `Question with ID ${question} not found.` };
+      return { error: "Question not found." };
     }
 
-    const surveyDoc = await this.surveys.findOne({ _id: questionDoc.survey });
-    if (!surveyDoc) {
-      return { error: "Associated survey for the question not found." };
-    }
+    // Delete any previous response from this user for this question
+    await this.responses.deleteMany({ question, responder });
 
-    if (value < surveyDoc.scaleMin || value > surveyDoc.scaleMax) {
-      return {
-        error:
-          `Response value ${value} is outside the survey's scale [${surveyDoc.scaleMin}, ${surveyDoc.scaleMax}].`,
-      };
-    }
-
-    const result = await this.responses.updateOne({ respondent, question }, {
-      $set: { value },
-    });
-
-    if (result.matchedCount === 0) {
-      return {
-        error:
-          "No existing response found to update. Use submitResponse to create one.",
-      };
-    }
-
+    const response: ResponseDoc = {
+      _id: freshID(),
+      responder,
+      question,
+      choice,
+    };
+    await this.responses.insertOne(response);
     return {};
   }
 
   /**
-   * Query: Retrieves all questions associated with a specific survey.
+   * _getSurveyQuestions (survey: Survey): (questions: set of Question)
+   *
+   * **requires** the given survey exists
+   * **effects** returns the set of all `Question` entities whose `survey` field matches the input `survey`
    */
   async _getSurveyQuestions(
     { survey }: { survey: Survey },
   ): Promise<QuestionDoc[]> {
+    const surveyDoc = await this.surveys.findOne({ _id: survey });
+    if (!surveyDoc) {
+      return [];
+    }
     return await this.questions.find({ survey }).toArray();
   }
 
   /**
-   * Query: Retrieves all responses for a given survey. This involves finding all
-   * questions for the survey first, then finding all responses to those questions.
+   * _getQuestionResults (question: Question): (results: map of Number to Number)
+   *
+   * **requires** question exists
+   * **effects** returns a map where each key is a choice value (e.g., 1-5) and its value is the count of Responses for this question with that choice
    */
-  async _getSurveyResponses(
-    { survey }: { survey: Survey },
-  ): Promise<ResponseDoc[]> {
-    const surveyQuestions = await this.questions.find({ survey }).project({
-      _id: 1,
-    }).toArray();
-    const questionIds = surveyQuestions.map((q) => q._id as Question);
-    return await this.responses.find({ question: { $in: questionIds } })
-      .toArray();
+  async _getQuestionResults(
+    { question }: { question: Question },
+  ): Promise<Array<Record<number, number>>> {
+    const questionDoc = await this.questions.findOne({ _id: question });
+    if (!questionDoc) {
+      return [];
+    }
+
+    const pipeline = [
+      { $match: { question } },
+      { $group: { _id: "$choice", count: { $sum: 1 } } },
+    ];
+
+    const results = await this.responses.aggregate<
+      { _id: number; count: number }
+    >(pipeline).toArray();
+    const responseMap: Record<number, number> = {};
+    for (const result of results) {
+      responseMap[result._id] = result.count;
+    }
+
+    // Ensure all choices 1-5 are present, even if their count is 0
+    for (let i = 1; i <= 5; i++) {
+      if (!responseMap[i]) {
+        responseMap[i] = 0;
+      }
+    }
+    return [responseMap];
   }
 
   /**
-   * Query: Retrieves all answers submitted by a specific respondent.
+   * _analyzeSentiment (question: Question): (sentiment: String)
+   *
+   * **effects** analyzes all responses for a given `question` and returns a string indicating the overall sentiment.
    */
-  async _getRespondentAnswers(
-    { respondent }: { respondent: Respondent },
-  ): Promise<ResponseDoc[]> {
-    return await this.responses.find({ respondent }).toArray();
+  async _analyzeSentiment(
+    { question }: { question: Question },
+  ): Promise<Array<{ sentiment: string }>> {
+    const questionDoc = await this.questions.findOne({ _id: question });
+    if (!questionDoc) {
+      // Per spec, no responses means neutral. An invalid question has no responses.
+      return [{ sentiment: "neutral" }];
+    }
+
+    const responses = await this.responses.find({ question }).toArray();
+    const scores = responses.map((r) => r.choice);
+
+    if (scores.length === 0) {
+      return [{ sentiment: "neutral" }];
+    }
+
+    const n = scores.length;
+    const mean = scores.reduce((a, b) => a + b) / n;
+    const variance =
+      scores.map((x) => Math.pow(x - mean, 2)).reduce((a, b) => a + b) / n;
+    const stdDev = Math.sqrt(variance);
+
+    let sentiment: string;
+    if (mean > 3.5) {
+      sentiment = "positive";
+    } else if (mean < 2.5) {
+      sentiment = "negative";
+    } else if (stdDev > 1.5) {
+      sentiment = "bimodal";
+    } else {
+      sentiment = "mixed";
+    }
+
+    return [{ sentiment }];
+  }
+
+  /**
+   * _getQuestionResponseCounts (question: Question): (counts: array of Number)
+   *
+   * **requires** the given question exists
+   * **effects** returns an array of counts of responses by choice number (that is, the nth element is the number of responses with choice n+1)
+   */
+  async _getQuestionResponseCounts(
+    { question }: { question: Question },
+  ): Promise<Array<number[]>> {
+    const questionDoc = await this.questions.findOne({ _id: question });
+    if (!questionDoc) {
+      return [];
+    }
+
+    const pipeline = [
+      { $match: { question } },
+      { $group: { _id: "$choice", count: { $sum: 1 } } },
+    ];
+
+    const results = await this.responses.aggregate<
+      { _id: number; count: number }
+    >(pipeline).toArray();
+
+    const counts = [0, 0, 0, 0, 0];
+    for (const result of results) {
+      // result._id is the choice (1-5)
+      counts[result._id - 1] = result.count;
+    }
+
+    return [counts];
+  }
+
+  /**
+   * _getUserSurveys (user: User): (surveys: set of Survey)
+   *
+   * **requires** the given user exists
+   * **effects** returns the set of all `Survey` entities where the `owner` field matches the input `user`
+   */
+  async _getUserSurveys({ user }: { user: User }): Promise<SurveyDoc[]> {
+    return await this.surveys.find({ owner: user }).toArray();
   }
 }
