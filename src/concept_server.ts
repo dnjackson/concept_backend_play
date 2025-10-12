@@ -76,7 +76,6 @@ async function main() {
         app.post(route, async (c) => {
           try {
             const body = await c.req.json().catch(() => ({})); // Handle empty body
-            console.log(body);
             const result = await instance[methodName](body);
             return c.json(result);
           } catch (e) {
