@@ -1,3 +1,12 @@
+---
+timestamp: 'Sun Oct 12 2025 23:40:34 GMT-0400 (Eastern Daylight Time)'
+parent: '[[../20251012_234034.79f8457d.md]]'
+content_id: f502bd9a2353fd1f35ac2f1d3037cb95c4a1eb3c0e31f0a7fcefaa5f1047e132
+---
+
+# file: src/concepts/LikertSurvey/LikertSurveyConcept.ts
+
+```typescript
 import { Collection, Db } from "npm:mongodb";
 import { Empty, ID } from "@utils/types.ts";
 import { freshID } from "@utils/database.ts";
@@ -320,10 +329,9 @@ export default class LikertSurveyConcept {
       const surveyDocs = await this.surveys.find({ owner: user }).toArray();
       return surveyDocs.map((s) => ({ survey: s._id }));
     } catch (e) {
-      if (e instanceof Error) {
-        return [{ error: e.message }];
-      }
-      return [{ error: "An unknown error occurred" }];
+      return [{ error: e.message }];
     }
   }
 }
+
+```

@@ -1,3 +1,12 @@
+---
+timestamp: 'Sun Oct 12 2025 23:41:59 GMT-0400 (Eastern Daylight Time)'
+parent: '[[../20251012_234159.159bb918.md]]'
+content_id: e870b12bcdb34521c75e301f02fa63dfa9253e7efbc6aebd856ac1cf07b0eb49
+---
+
+# file: src/LikertSurvey/LikertSurveyConcept.ts
+
+```typescript
 import { Collection, Db } from "npm:mongodb";
 import { Empty, ID } from "@utils/types.ts";
 import { freshID } from "@utils/database.ts";
@@ -67,9 +76,7 @@ export default class LikertSurveyConcept {
    * @requires title is non-empty
    * @effects creates a new `Survey` with the given title and owner and returns it
    */
-  async createSurvey(
-    { title, owner }: { title: string; owner: User },
-  ): Promise<{ survey: Survey } | { error: string }> {
+  async createSurvey({ title, owner }: { title: string; owner: User }): Promise<{ survey: Survey } | { error: string }> {
     if (!title) {
       return { error: "Title cannot be empty" };
     }
@@ -94,9 +101,7 @@ export default class LikertSurveyConcept {
    * @requires stem is non-empty and survey exists
    * @effects creates a new `Question` with the given stem, associates it with the given survey, and returns it
    */
-  async addQuestion(
-    { stem, survey }: { stem: string; survey: Survey },
-  ): Promise<{ question: Question } | { error: string }> {
+  async addQuestion({ stem, survey }: { stem: string; survey: Survey }): Promise<{ question: Question } | { error: string }> {
     if (!stem) {
       return { error: "Question stem cannot be empty" };
     }
@@ -126,9 +131,7 @@ export default class LikertSurveyConcept {
    * @requires question exists
    * @effects removes the specified question and all `Response` entities associated with it
    */
-  async removeQuestion(
-    { question }: { question: Question },
-  ): Promise<Empty | { error: string }> {
+  async removeQuestion({ question }: { question: Question }): Promise<Empty | { error: string }> {
     const questionDoc = await this.questions.findOne({ _id: question });
     if (!questionDoc) {
       return { error: "Question not found" };
@@ -148,13 +151,7 @@ export default class LikertSurveyConcept {
    * @requires question exists and choice is an integer between 1 and 5
    * @effects delete any existing response to this question, then creates a new `Response` linking the responder, question, and choice
    */
-  async respondToQuestion(
-    { question, responder, choice }: {
-      question: Question;
-      responder: User;
-      choice: number;
-    },
-  ): Promise<Empty | { error: string }> {
+  async respondToQuestion({ question, responder, choice }: { question: Question; responder: User; choice: number }): Promise<Empty | { error: string }> {
     const questionDoc = await this.questions.findOne({ _id: question });
     if (!questionDoc) {
       return { error: "Question not found" };
@@ -186,9 +183,7 @@ export default class LikertSurveyConcept {
    * @requires survey exists
    * @effects returns the set of all Questions whose survey is the given survey
    */
-  async _getSurveyQuestions(
-    { survey }: { survey: Survey },
-  ): Promise<{ question: Question }[] | { error: string }[]> {
+  async _getSurveyQuestions({ survey }: { survey: Survey }): Promise<{ question: Question }[] | { error: string }[]> {
     const surveyDoc = await this.surveys.findOne({ _id: survey });
     if (!surveyDoc) {
       return [{ error: "Survey not found" }];
@@ -204,9 +199,7 @@ export default class LikertSurveyConcept {
    * @requires survey exists
    * @effects returns the title of the survey
    */
-  async _getSurveyTitle(
-    { survey }: { survey: Survey },
-  ): Promise<{ title: string }[] | { error: string }[]> {
+  async _getSurveyTitle({ survey }: { survey: Survey }): Promise<{ title: string }[] | { error: string }[]> {
     const surveyDoc = await this.surveys.findOne({ _id: survey });
     if (!surveyDoc) {
       return [{ error: "Survey not found" }];
@@ -220,9 +213,7 @@ export default class LikertSurveyConcept {
    * @requires survey exists
    * @effects returns the owner of the survey
    */
-  async _getSurveyOwner(
-    { survey }: { survey: Survey },
-  ): Promise<{ owner: User }[] | { error: string }[]> {
+  async _getSurveyOwner({ survey }: { survey: Survey }): Promise<{ owner: User }[] | { error: string }[]> {
     const surveyDoc = await this.surveys.findOne({ _id: survey });
     if (!surveyDoc) {
       return [{ error: "Survey not found" }];
@@ -236,9 +227,7 @@ export default class LikertSurveyConcept {
    * @requires question exists
    * @effects returns the stem of the question
    */
-  async _getQuestionStem(
-    { question }: { question: Question },
-  ): Promise<{ stem: string }[] | { error: string }[]> {
+  async _getQuestionStem({ question }: { question: Question }): Promise<{ stem: string }[] | { error: string }[]> {
     const questionDoc = await this.questions.findOne({ _id: question });
     if (!questionDoc) {
       return [{ error: "Question not found" }];
@@ -252,9 +241,7 @@ export default class LikertSurveyConcept {
    * @requires question exists
    * @effects returns an array of counts of responses by choice number (that is, the nth element is the number of responses with choice n+1). The result is an array containing an array.
    */
-  async _getQuestionResponseCounts(
-    { question }: { question: Question },
-  ): Promise<{ counts: number[] }[] | { error: string }[]> {
+  async _getQuestionResponseCounts({ question }: { question: Question }): Promise<{ counts: number[] }[] | { error: string }[]> {
     const questionDoc = await this.questions.findOne({ _id: question });
     if (!questionDoc) {
       return [{ error: "Question not found" }];
@@ -276,9 +263,7 @@ export default class LikertSurveyConcept {
    *
    * @effects This query analyzes all responses for a given `question` and returns a string indicating the overall sentiment.
    */
-  async _analyzeSentiment(
-    { question }: { question: Question },
-  ): Promise<{ sentiment: string }[] | { error: string }[]> {
+  async _analyzeSentiment({ question }: { question: Question }): Promise<{ sentiment: string }[] | { error: string }[]> {
     const responses = await this.responses.find({ question }).toArray();
 
     if (responses.length === 0) {
@@ -290,8 +275,7 @@ export default class LikertSurveyConcept {
     const avg = sum / scores.length;
 
     const squaredDiffs = scores.map((score) => Math.pow(score - avg, 2));
-    const avgSquaredDiff = squaredDiffs.reduce((acc, diff) => acc + diff, 0) /
-      scores.length;
+    const avgSquaredDiff = squaredDiffs.reduce((acc, diff) => acc + diff, 0) / scores.length;
     const stdDev = Math.sqrt(avgSquaredDiff);
 
     if (avg > 3.5) {
@@ -313,9 +297,7 @@ export default class LikertSurveyConcept {
    * @requires the given user exists
    * @effects returns an array of all `Survey` identities where the `owner` field matches the input `user`
    */
-  async _getUserSurveys(
-    { user }: { user: User },
-  ): Promise<{ survey: Survey }[] | { error: string }[]> {
+  async _getUserSurveys({ user }: { user: User }): Promise<{ survey: Survey }[] | { error: string }[]> {
     try {
       const surveyDocs = await this.surveys.find({ owner: user }).toArray();
       return surveyDocs.map((s) => ({ survey: s._id }));
@@ -327,3 +309,4 @@ export default class LikertSurveyConcept {
     }
   }
 }
+```

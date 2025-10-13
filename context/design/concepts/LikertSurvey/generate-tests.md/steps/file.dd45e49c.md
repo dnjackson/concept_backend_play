@@ -1,3 +1,12 @@
+---
+timestamp: 'Sun Oct 12 2025 23:43:34 GMT-0400 (Eastern Daylight Time)'
+parent: '[[../20251012_234334.d30cd05f.md]]'
+content_id: dd45e49ce6036930da7f09ca9df0ed939d2cc46a2e9f76f7e7ea3320e8f5ca8a
+---
+
+# file: src/concepts/LikertSurvey/LikertSurveyConcept.ts
+
+```typescript
 import { Collection, Db } from "npm:mongodb";
 import { Empty, ID } from "@utils/types.ts";
 import { freshID } from "@utils/database.ts";
@@ -327,3 +336,5 @@ export default class LikertSurveyConcept {
     }
   }
 }
+
+```

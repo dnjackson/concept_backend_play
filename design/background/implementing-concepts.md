@@ -158,7 +158,7 @@ Note that even for actions that don't want to return anything, you should return
 
 # Dictionaries as arguments and results
 
-Note that the arguments and results of actions and queries are always dictionaries. For example if an action in a specification has the signature
+Note that the arguments and results of actions are always dictionaries. For example if an action in a specification has the signature
 
 ```
 action (a: A, b: B): (c: C)
@@ -170,14 +170,33 @@ this means that the implementation should take a dictionary with fields named `a
 action (a: A, b: B): (error: string)
 ```
 
-Queries generally return an array of dictionaries so if the specification has this signature:
+Queries always return an array of dictionaries so if the specification has this signature:
 
 ```
-\_query (a: A, b: B): \[c: C\]
+\_query (a: A, b: B): (c: C)
 \_query (a: A, b: B): (error: string)
 ```
 
-the implementation should return an array of dictionaries each with a field called `c` or, in the error case, a dictionary with a field `error` of type string.
+the implementation should return an array of dictionaries each with a field called `c` or, in the error case, a dictionary with a field `error` of type string. Note also that a query, unlike an action, can return a nested dictionary. For example, given this state
+
+```
+	a set of Groups with
+	  a users set of User
+
+	a set of Users with
+	  a username String
+	  a password String
+```
+
+the query specification
+
+```
+	\_getUsersWithUsernamesAndPasswords (group: Group) : (user: {username: String, password: String})
+    **requires** group exists
+    **effects** returns set of all users in the group each with its username and password
+```
+
+says that the query should return an array of dictionaries, each with a `user` field that holds a dictionary with a `username` and `password` field.
 
 # Imports
 

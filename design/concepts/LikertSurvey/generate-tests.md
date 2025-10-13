@@ -10,381 +10,710 @@ Please generate a test file for this concept implementation:
 
 # response:
 
-Here is the test file for the `LikertSurveyConcept`.
+Here is a complete test suite for the `LikertSurveyConcept`.
+
+First, let's document the concept specification that guides these tests, as derived from the implementation.
 
 # concept: LikertSurvey
 
-*   **concept**: LikertSurvey [User]
+*   **concept**: LikertSurvey \[User]
 *   **purpose**: understand group sentiment on a set of topics by aggregating quantitative feedback
-*   **principle**: after a survey owner creates a survey and adds a question, multiple users can respond to that question with their choice on a 1-5 scale. Later, the owner (or any interested party) can query the results for that question to see an aggregate distribution of responses and an analysis of the overall sentiment.
+*   **principle**: A user creates a survey containing several questions. Other users can then respond to these questions on a scale of 1 to 5. The survey owner can then analyze the aggregated responses for each question to understand overall sentiment, which might be positive, negative, mixed, or even bimodal.
 *   **state**:
-    *   a set of Surveys with
-        *   a title String
-        *   an owner User
-    *   a set of Questions with
-        *   a stem String
-        *   a survey Survey
-    *   a set of Responses with
-        *   a responder User
-        *   a question Question
-        *   a choice Number (integer from 1 to 5)
+    *   a set of Surveys with a title (String) and an owner (User)
+    *   a set of Questions with a stem (String) and a survey (Survey)
+    *   a set of Responses with a responder (User), a question (Question), and a choice (Number from 1-5)
 *   **actions**:
     *   `createSurvey (title: String, owner: User): (survey: Survey)`
     *   `addQuestion (stem: String, survey: Survey): (question: Question)`
     *   `removeQuestion (question: Question)`
     *   `respondToQuestion (question: Question, responder: User, choice: Number)`
 *   **queries**:
-    *   `_getSurveyQuestions (survey: Survey): [questions: Question]`
-    *   `_getQuestionResults (question: Question): [{ results: map of Number to Number }]`
-    *   `_analyzeSentiment (question: Question): [{ sentiment: String }]`
-    *   `_getQuestionResponseCounts (question: Question): [{ counts: Number[] }]`
-    *   `_getUserSurveys (user: User): [surveys: Survey]`
+    *   `_getSurveyQuestions (survey: Survey): (question: Question)`
+    *   `_getSurveyTitle (survey: Survey): (title: String)`
+    *   `_getSurveyOwner (survey: Survey): (owner: User)`
+    *   `_getQuestionStem (question: Question): (stem: String)`
+    *   `_getQuestionResponseCounts (question: Question): (counts: Number[])`
+    *   `_analyzeSentiment (question: Question): (sentiment: String)`
+    *   `_getUserSurveys (user: User): (survey: Survey)`
 
 # file: src/concepts/LikertSurvey/LikertSurveyConcept.test.ts
 
 ```typescript
-import { assertEquals, assertExists, assertNotEquals } from "jsr:@std/assert";
+import { assertEquals, assertExists, assert } from "jsr:@std/assert";
 import { testDb } from "@utils/database.ts";
 import { ID } from "@utils/types.ts";
 import LikertSurveyConcept from "./LikertSurveyConcept.ts";
 
-// Define generic types for test data
-type User = ID;
-type Survey = ID;
-type Question = ID;
+// Mock IDs for testing
+const userA = "user:Alice" as ID;
+const userB = "user:Bob" as ID;
+const userC = "user:Charlie" as ID;
+const nonExistentSurvey = "survey:nonExistent" as ID;
+const nonExistentQuestion = "question:nonExistent" as ID;
 
-Deno.test("LikertSurveyConcept - Actions", async (t) => {
+Deno.test("LikertSurveyConcept: Action `createSurvey`", async (t) => {
   const [db, client] = await testDb();
-  const likertSurvey = new LikertSurveyConcept(db);
+  const likert = new LikertSurveyConcept(db);
 
-  const owner = "user:owner" as User;
-  let surveyId: Survey;
-  let questionId: Question;
-
-  await t.step("createSurvey action", async (t) => {
-    await t.step("should create a survey successfully", async () => {
-      console.log("  - Testing successful survey creation...");
-      const result = await likertSurvey.createSurvey({
-        title: "Customer Satisfaction",
-        owner: owner,
-      });
-      assertNotEquals("error" in result, true, "Should not return an error");
-      const { survey } = result as { survey: Survey };
-      assertExists(survey);
-      surveyId = survey;
-
-      // Effect verification: Check if the survey is in the database
-      const userSurveys = await likertSurvey._getUserSurveys({ user: owner });
-      assertEquals(Array.isArray(userSurveys), true);
-      const surveys = userSurveys as { surveys: Survey }[];
-      assertEquals(surveys.length, 1);
-      assertEquals(surveys[0].surveys, surveyId);
-      console.log("    -> Survey created and verified.");
-    });
-
-    await t.step(
-      "should fail to create survey if title is empty",
-      async () => {
-        console.log(
-          "  - Testing requirement: non-empty title for createSurvey...",
-        );
-        const result = await likertSurvey.createSurvey({ title: "", owner });
-        assertEquals("error" in result, true);
-        assertEquals(
-          (result as { error: string }).error,
-          "Title cannot be empty",
-        );
-        console.log("    -> Correctly failed with empty title.");
-      },
-    );
+  await t.step("requires: title should be non-empty", async () => {
+    console.log("  - Testing requirement: title must be non-empty");
+    const res = await likert.createSurvey({ title: "", owner: userA });
+    assert("error" in res, "Expected an error for empty title");
+    assertEquals(res.error, "Title cannot be empty");
   });
 
-  await t.step("addQuestion action", async (t) => {
-    await t.step("should add a question to an existing survey", async () => {
-      console.log("  - Testing successful question addition...");
-      const result = await likertSurvey.addQuestion({
-        stem: "How satisfied are you with our service?",
-        survey: surveyId,
-      });
-      assertNotEquals("error" in result, true);
-      const { question } = result as { question: Question };
-      assertExists(question);
-      questionId = question;
+  await t.step("effects: creates a survey and associates it with an owner", async () => {
+    console.log("  - Testing effect: successfully creates a survey");
+    const res = await likert.createSurvey({ title: "Team Morale", owner: userA });
+    assert("survey" in res, "Expected a survey ID on successful creation");
+    const { survey } = res;
+    assertExists(survey);
 
-      // Effect verification: Check if the question is associated with the survey
-      const surveyQuestions = await likertSurvey._getSurveyQuestions({
-        survey: surveyId,
-      });
-      assertEquals(Array.isArray(surveyQuestions), true);
-      const questions = surveyQuestions as { questions: Question }[];
-      assertEquals(questions.length, 1);
-      assertEquals(questions[0].questions, questionId);
-      console.log("    -> Question added and verified.");
-    });
+    console.log("  - Verifying survey properties using queries...");
+    const [titleRes] = await likert._getSurveyTitle({ survey });
+    const [ownerRes] = await likert._getSurveyOwner({ survey });
+    const userSurveys = await likert._getUserSurveys({ user: userA });
 
-    await t.step("should fail if stem is empty", async () => {
-      console.log(
-        "  - Testing requirement: non-empty stem for addQuestion...",
-      );
-      const result = await likertSurvey.addQuestion({
-        stem: "",
-        survey: surveyId,
-      });
-      assertEquals("error" in result, true);
-      assertEquals(
-        (result as { error: string }).error,
-        "Question stem cannot be empty",
-      );
-      console.log("    -> Correctly failed with empty stem.");
-    });
-
-    await t.step("should fail if survey does not exist", async () => {
-      console.log(
-        "  - Testing requirement: existing survey for addQuestion...",
-      );
-      const fakeSurveyId = "survey:fake" as Survey;
-      const result = await likertSurvey.addQuestion({
-        stem: "A valid question",
-        survey: fakeSurveyId,
-      });
-      assertEquals("error" in result, true);
-      assertEquals(
-        (result as { error: string }).error,
-        `Survey with id ${fakeSurveyId} not found`,
-      );
-      console.log("    -> Correctly failed with non-existent survey.");
-    });
-  });
-
-  await t.step("respondToQuestion action", async (t) => {
-    const responder = "user:responder" as User;
-
-    await t.step(
-      "should successfully record a response to a question",
-      async () => {
-        console.log("  - Testing successful response recording...");
-        const result = await likertSurvey.respondToQuestion({
-          question: questionId,
-          responder,
-          choice: 4,
-        });
-        assertEquals("error" in result, false);
-
-        // Effect verification: check results
-        const results = await likertSurvey._getQuestionResults({
-          question: questionId,
-        });
-        const res = results as { results: Record<number, number> }[];
-        assertEquals(res[0].results[4], 1);
-        console.log("    -> Response recorded and verified.");
-      },
-    );
-
-    await t.step("should update an existing response", async () => {
-      console.log("  - Testing response update...");
-      const result = await likertSurvey.respondToQuestion({
-        question: questionId,
-        responder,
-        choice: 5,
-      });
-      assertEquals("error" in result, false);
-
-      // Effect verification: old response is gone, new one is present
-      const results = await likertSurvey._getQuestionResults({
-        question: questionId,
-      });
-      const res = results as { results: Record<number, number> }[];
-      assertEquals(res[0].results[4], 0);
-      assertEquals(res[0].results[5], 1);
-      console.log("    -> Response updated and verified.");
-    });
-
-    await t.step(
-      "should fail if choice is not an integer between 1 and 5",
-      async () => {
-        console.log(
-          "  - Testing requirement: valid choice for respondToQuestion...",
-        );
-        const invalidChoices = [0, 6, 3.5, NaN];
-        for (const choice of invalidChoices) {
-          const result = await likertSurvey.respondToQuestion({
-            question: questionId,
-            responder,
-            choice,
-          });
-          assertEquals("error" in result, true, `Failed for choice: ${choice}`);
-          assertEquals(
-            (result as { error: string }).error,
-            "Choice must be an integer between 1 and 5",
-          );
-        }
-        console.log(
-          "    -> Correctly failed for multiple invalid choice values.",
-        );
-      },
-    );
-  });
-
-  await t.step("removeQuestion action", async (t) => {
-    await t.step(
-      "should remove a question and its associated responses",
-      async () => {
-        console.log("  - Testing successful question removal...");
-        // Add a response to be removed
-        await likertSurvey.respondToQuestion({
-          question: questionId,
-          responder: "user:another" as User,
-          choice: 3,
-        });
-
-        const result = await likertSurvey.removeQuestion({
-          question: questionId,
-        });
-        assertEquals("error" in result, false);
-
-        // Effect verification: question is gone
-        const surveyQuestions = await likertSurvey._getSurveyQuestions({
-          survey: surveyId,
-        });
-        assertEquals(Array.isArray(surveyQuestions), true);
-        assertEquals((surveyQuestions as { questions: Question }[]).length, 0);
-
-        // Effect verification: responses are gone
-        const questionResults = await likertSurvey._getQuestionResults({
-          question: questionId,
-        });
-        assertEquals("error" in questionResults, true); // The query should now fail as the question doesn't exist
-        console.log("    -> Question and its responses removed and verified.");
-      },
-    );
-
-    await t.step("should fail if question does not exist", async () => {
-      console.log(
-        "  - Testing requirement: existing question for removeQuestion...",
-      );
-      const fakeQuestionId = "question:fake" as Question;
-      const result = await likertSurvey.removeQuestion({
-        question: fakeQuestionId,
-      });
-      assertEquals("error" in result, true);
-      assertEquals(
-        (result as { error: string }).error,
-        `Question with id ${fakeQuestionId} not found`,
-      );
-      console.log("    -> Correctly failed with non-existent question.");
-    });
+    assertEquals(titleRes.title, "Team Morale");
+    assertEquals(ownerRes.owner, userA);
+    assertEquals(userSurveys.length, 1);
+    assertEquals(userSurveys[0].survey, survey);
   });
 
   await client.close();
 });
 
-Deno.test("LikertSurveyConcept - Principle", async () => {
-  console.log("Testing principle: Create survey, get responses, analyze sentiment");
+Deno.test("LikertSurveyConcept: Action `addQuestion`", async (t) => {
   const [db, client] = await testDb();
-  const likertSurvey = new LikertSurveyConcept(db);
+  const likert = new LikertSurveyConcept(db);
+  const { survey } = await likert.createSurvey({ title: "Team Morale", owner: userA }) as { survey: ID };
 
-  // Define actors
-  const owner = "user:principle-owner" as User;
-  const responders = [
-    "user:alice" as User,
-    "user:bob" as User,
-    "user:charlie" as User,
-    "user:diana" as User,
-  ];
-
-  // 1. Owner creates a survey and adds a question
-  console.log("  - Step 1: Owner creates a survey and adds a question.");
-  const surveyRes = await likertSurvey.createSurvey({
-    title: "Team Mood Check",
-    owner,
+  await t.step("requires: stem should be non-empty", async () => {
+    console.log("  - Testing requirement: stem must be non-empty");
+    const res = await likert.addQuestion({ stem: "", survey });
+    assert("error" in res, "Expected an error for empty stem");
+    assertEquals(res.error, "Question stem cannot be empty");
   });
-  const surveyId = (surveyRes as { survey: Survey }).survey;
-  const questionRes = await likertSurvey.addQuestion({
-    stem: "How do you feel about the new workflow?",
-    survey: surveyId,
+
+  await t.step("requires: survey must exist", async () => {
+    console.log("  - Testing requirement: survey must exist");
+    const res = await likert.addQuestion({ stem: "A valid question", survey: nonExistentSurvey });
+    assert("error" in res, "Expected an error for non-existent survey");
+    assertEquals(res.error, "Survey not found");
   });
-  const questionId = (questionRes as { question: Question }).question;
-  console.log(`    -> Survey '${surveyId}' and Question '${questionId}' created.`);
 
-  // 2. Multiple users respond to the question
-  console.log("  - Step 2: Multiple users respond.");
-  await likertSurvey.respondToQuestion({
-    question: questionId,
-    responder: responders[0],
-    choice: 5,
-  }); // Alice: Strongly Agree
-  await likertSurvey.respondToQuestion({
-    question: questionId,
-    responder: responders[1],
-    choice: 4,
-  }); // Bob: Agree
-  await likertSurvey.respondToQuestion({
-    question: questionId,
-    responder: responders[2],
-    choice: 4,
-  }); // Charlie: Agree
-  await likertSurvey.respondToQuestion({
-    question: questionId,
-    responder: responders[3],
-    choice: 2,
-  }); // Diana: Disagree
-  console.log("    -> Alice(5), Bob(4), Charlie(4), Diana(2) responded.");
+  await t.step("effects: creates a question and associates it with a survey", async () => {
+    console.log("  - Testing effect: successfully creates a question");
+    const res = await likert.addQuestion({ stem: "How is the work-life balance?", survey });
+    assert("question" in res, "Expected a question ID on successful creation");
+    const { question } = res;
+    assertExists(question);
 
-  // 3. Owner queries the results and sentiment
-  console.log("  - Step 3: Owner queries results and analyzes sentiment.");
+    console.log("  - Verifying question properties using queries...");
+    const [stemRes] = await likert._getQuestionStem({ question });
+    const surveyQuestions = await likert._getSurveyQuestions({ survey });
 
-  // Verify response counts
-  const countsRes = await likertSurvey._getQuestionResponseCounts({
-    question: questionId,
+    assertEquals(stemRes.stem, "How is the work-life balance?");
+    assertEquals(surveyQuestions.length, 1);
+    assertEquals(surveyQuestions[0].question, question);
   });
-  const counts = (countsRes as { counts: number[] }[])[0].counts;
-  assertEquals(counts, [0, 1, 0, 2, 1]); // [choice 1, choice 2, choice 3, choice 4, choice 5]
-  console.log(`    -> Verified response counts: ${counts}`);
 
-  // Verify sentiment
-  const sentimentRes = await likertSurvey._analyzeSentiment({
-    question: questionId,
+  await client.close();
+});
+
+Deno.test("LikertSurveyConcept: Action `respondToQuestion`", async (t) => {
+  const [db, client] = await testDb();
+  const likert = new LikertSurveyConcept(db);
+  const { survey } = await likert.createSurvey({ title: "Product Feedback", owner: userA }) as { survey: ID };
+  const { question } = await likert.addQuestion({ stem: "Is the UI intuitive?", survey }) as { question: ID };
+
+  await t.step("requires: question must exist", async () => {
+    console.log("  - Testing requirement: question must exist");
+    const res = await likert.respondToQuestion({ question: nonExistentQuestion, responder: userB, choice: 5 });
+    assert("error" in res, "Expected an error for non-existent question");
+    assertEquals(res.error, "Question not found");
   });
-  const sentiment = (sentimentRes as { sentiment: string }[])[0].sentiment;
-  // Mean is (5+4+4+2)/4 = 15/4 = 3.75, which is > 3.5
-  assertEquals(sentiment, "positive");
-  console.log(`    -> Verified sentiment: '${sentiment}'.`);
 
-  console.log("Principle test successful: The concept correctly aggregates and analyzes responses.");
+  await t.step("requires: choice must be an integer between 1 and 5", async () => {
+    console.log("  - Testing requirement: choice must be an integer 1-5");
+    const invalidChoices = [0, 6, 3.5, -1];
+    for (const choice of invalidChoices) {
+      const res = await likert.respondToQuestion({ question, responder: userB, choice });
+      assert("error" in res, `Expected an error for choice ${choice}`);
+      assertEquals(res.error, "Choice must be an integer between 1 and 5");
+    }
+  });
 
+  await t.step("effects: creates a response and can overwrite a previous one", async () => {
+    console.log("  - Testing effect: user B responds with choice 4");
+    const res1 = await likert.respondToQuestion({ question, responder: userB, choice: 4 });
+    assert(!("error" in res1), "Should successfully create a response");
+
+    let [countsRes1] = await likert._getQuestionResponseCounts({ question });
+    assertEquals(countsRes1.counts, [0, 0, 0, 1, 0]);
+
+    console.log("  - Testing effect: user B changes response to choice 5");
+    const res2 = await likert.respondToQuestion({ question, responder: userB, choice: 5 });
+    assert(!("error" in res2), "Should successfully overwrite the response");
+
+    let [countsRes2] = await likert._getQuestionResponseCounts({ question });
+    assertEquals(countsRes2.counts, [0, 0, 0, 0, 1], "Previous response should be removed");
+  });
+
+  await client.close();
+});
+
+Deno.test("LikertSurveyConcept: Action `removeQuestion`", async (t) => {
+  const [db, client] = await testDb();
+  const likert = new LikertSurveyConcept(db);
+  const { survey } = await likert.createSurvey({ title: "Workshop Feedback", owner: userA }) as { survey: ID };
+  const { question } = await likert.addQuestion({ stem: "Was the content useful?", survey }) as { question: ID };
+  await likert.respondToQuestion({ question, responder: userB, choice: 5 });
+  await likert.respondToQuestion({ question, responder: userC, choice: 4 });
+
+  await t.step("requires: question must exist", async () => {
+    console.log("  - Testing requirement: question must exist");
+    const res = await likert.removeQuestion({ question: nonExistentQuestion });
+    assert("error" in res, "Expected an error for non-existent question");
+    assertEquals(res.error, "Question not found");
+  });
+
+  await t.step("effects: removes the question and its associated responses", async () => {
+    console.log("  - Verifying state before removal...");
+    assertEquals((await likert._getSurveyQuestions({ survey })).length, 1);
+    const [countsBefore] = await likert._getQuestionResponseCounts({ question });
+    assertEquals(countsBefore.counts, [0, 0, 0, 1, 1]);
+
+    console.log("  - Testing effect: removing the question");
+    const res = await likert.removeQuestion({ question });
+    assert(!("error" in res), "Should successfully remove the question");
+
+    console.log("  - Verifying state after removal...");
+    assertEquals((await likert._getSurveyQuestions({ survey })).length, 0);
+    // Querying for the removed question should now fail
+    const [stemAfter] = await likert._getQuestionStem({ question });
+    assert("error" in stemAfter, "Querying a deleted question should fail");
+  });
+
+  await client.close();
+});
+
+# trace:
+
+Deno.test("LikertSurveyConcept: Principle Test", async () => {
+  console.log("Principle: An owner creates a survey, users respond, and the owner analyzes sentiment.");
+  const [db, client] = await testDb();
+  const likert = new LikertSurveyConcept(db);
+
+  console.log("\n1. Alice (owner) creates a 'Team Satisfaction' survey.");
+  const surveyRes = await likert.createSurvey({ title: "Team Satisfaction", owner: userA });
+  const { survey } = surveyRes as { survey: ID };
+  assertExists(survey);
+
+  console.log("\n2. Alice adds two questions to the survey.");
+  const q1Res = await likert.addQuestion({ stem: "Are you happy with the work-life balance?", survey });
+  const { question: q1 } = q1Res as { question: ID };
+  const q2Res = await likert.addQuestion({ stem: "Is the project challenging enough?", survey });
+  const { question: q2 } = q2Res as { question: ID };
+  assertExists(q1);
+  assertExists(q2);
+
+  console.log("\n3. Other users (Bob and Charlie) respond to the questions.");
+  console.log("  - Bob responds to Q1 ('work-life balance') with 5 (Strongly Agree).");
+  await likert.respondToQuestion({ question: q1, responder: userB, choice: 5 });
+  console.log("  - Charlie responds to Q1 ('work-life balance') with 4 (Agree).");
+  await likert.respondToQuestion({ question: q1, responder: userC, choice: 4 });
+  console.log("  - Bob responds to Q2 ('challenging enough') with 1 (Strongly Disagree).");
+  await likert.respondToQuestion({ question: q2, responder: userB, choice: 1 });
+  console.log("  - Charlie responds to Q2 ('challenging enough') with 5 (Strongly Agree).");
+  await likert.respondToQuestion({ question: q2, responder: userC, choice: 5 });
+
+  console.log("\n4. Alice analyzes the results.");
+
+  console.log("\n  - Analyzing Q1: 'Are you happy with the work-life balance?'");
+  const [countsQ1] = await likert._getQuestionResponseCounts({ question: q1 });
+  const [sentimentQ1] = await likert._analyzeSentiment({ question: q1 });
+  console.log(`    Response counts: ${JSON.stringify(countsQ1.counts)}`);
+  console.log(`    Calculated sentiment: ${sentimentQ1.sentiment}`);
+  assertEquals(countsQ1.counts, [0, 0, 0, 1, 1]);
+  assertEquals(sentimentQ1.sentiment, "positive");
+
+  console.log("\n  - Analyzing Q2: 'Is the project challenging enough?'");
+  const [countsQ2] = await likert._getQuestionResponseCounts({ question: q2 });
+  const [sentimentQ2] = await likert._analyzeSentiment({ question: q2 });
+  console.log(`    Response counts: ${JSON.stringify(countsQ2.counts)}`);
+  console.log(`    Calculated sentiment: ${sentimentQ2.sentiment}`);
+  assertEquals(countsQ2.counts, [1, 0, 0, 0, 1]);
+  assertEquals(sentimentQ2.sentiment, "bimodal"); // Avg is 3, std dev is 2 > 1.5
+
+  console.log("\nPrinciple successfully demonstrated.");
   await client.close();
 });
 ```
 
-# trace:
+# fix errors:
 
-The following trace describes how the principle test fulfills the concept's purpose:
+[{
+	"resource": "/Users/dnj/Repos/concept_backend_play/src/concepts/LikertSurvey/LikertSurveyConcept.test.ts",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'title' does not exist on type '{ title: string; } | { error: string; }'.\n  Property 'title' does not exist on type '{ error: string; }'.",
+	"source": "deno-ts",
+	"startLineNumber": 36,
+	"startColumn": 27,
+	"endLineNumber": 36,
+	"endColumn": 32,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/dnj/Repos/concept_backend_play/src/concepts/LikertSurvey/LikertSurveyConcept.test.ts",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'owner' does not exist on type '{ owner: ID; } | { error: string; }'.\n  Property 'owner' does not exist on type '{ error: string; }'.",
+	"source": "deno-ts",
+	"startLineNumber": 37,
+	"startColumn": 27,
+	"endLineNumber": 37,
+	"endColumn": 32,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/dnj/Repos/concept_backend_play/src/concepts/LikertSurvey/LikertSurveyConcept.test.ts",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'survey' does not exist on type '{ survey: ID; } | { error: string; }'.\n  Property 'survey' does not exist on type '{ error: string; }'.",
+	"source": "deno-ts",
+	"startLineNumber": 39,
+	"startColumn": 33,
+	"endLineNumber": 39,
+	"endColumn": 39,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/dnj/Repos/concept_backend_play/src/concepts/LikertSurvey/LikertSurveyConcept.test.ts",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'stem' does not exist on type '{ stem: string; } | { error: string; }'.\n  Property 'stem' does not exist on type '{ error: string; }'.",
+	"source": "deno-ts",
+	"startLineNumber": 75,
+	"startColumn": 26,
+	"endLineNumber": 75,
+	"endColumn": 30,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/dnj/Repos/concept_backend_play/src/concepts/LikertSurvey/LikertSurveyConcept.test.ts",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'question' does not exist on type '{ question: ID; } | { error: string; }'.\n  Property 'question' does not exist on type '{ error: string; }'.",
+	"source": "deno-ts",
+	"startLineNumber": 77,
+	"startColumn": 37,
+	"endLineNumber": 77,
+	"endColumn": 45,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/dnj/Repos/concept_backend_play/src/concepts/LikertSurvey/LikertSurveyConcept.test.ts",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'counts' does not exist on type '{ counts: number[]; } | { error: string; }'.\n  Property 'counts' does not exist on type '{ error: string; }'.",
+	"source": "deno-ts",
+	"startLineNumber": 112,
+	"startColumn": 29,
+	"endLineNumber": 112,
+	"endColumn": 35,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/dnj/Repos/concept_backend_play/src/concepts/LikertSurvey/LikertSurveyConcept.test.ts",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'counts' does not exist on type '{ counts: number[]; } | { error: string; }'.\n  Property 'counts' does not exist on type '{ error: string; }'.",
+	"source": "deno-ts",
+	"startLineNumber": 119,
+	"startColumn": 29,
+	"endLineNumber": 119,
+	"endColumn": 35,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/dnj/Repos/concept_backend_play/src/concepts/LikertSurvey/LikertSurveyConcept.test.ts",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'counts' does not exist on type '{ counts: number[]; } | { error: string; }'.\n  Property 'counts' does not exist on type '{ error: string; }'.",
+	"source": "deno-ts",
+	"startLineNumber": 144,
+	"startColumn": 31,
+	"endLineNumber": 144,
+	"endColumn": 37,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/dnj/Repos/concept_backend_play/src/concepts/LikertSurvey/LikertSurveyConcept.test.ts",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": "1127",
+	"severity": 8,
+	"message": "Invalid character.",
+	"source": "deno-ts",
+	"startLineNumber": 160,
+	"startColumn": 1,
+	"endLineNumber": 160,
+	"endColumn": 2,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/dnj/Repos/concept_backend_play/src/concepts/LikertSurvey/LikertSurveyConcept.test.ts",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": "1005",
+	"severity": 8,
+	"message": "';' expected.",
+	"source": "deno-ts",
+	"startLineNumber": 160,
+	"startColumn": 3,
+	"endLineNumber": 160,
+	"endColumn": 8,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/dnj/Repos/concept_backend_play/src/concepts/LikertSurvey/LikertSurveyConcept.test.ts",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'counts' does not exist on type '{ counts: number[]; } | { error: string; }'.\n  Property 'counts' does not exist on type '{ error: string; }'.",
+	"source": "deno-ts",
+	"startLineNumber": 195,
+	"startColumn": 63,
+	"endLineNumber": 195,
+	"endColumn": 69,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/dnj/Repos/concept_backend_play/src/concepts/LikertSurvey/LikertSurveyConcept.test.ts",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'sentiment' does not exist on type '{ sentiment: string; } | { error: string; }'.\n  Property 'sentiment' does not exist on type '{ error: string; }'.",
+	"source": "deno-ts",
+	"startLineNumber": 196,
+	"startColumn": 56,
+	"endLineNumber": 196,
+	"endColumn": 65,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/dnj/Repos/concept_backend_play/src/concepts/LikertSurvey/LikertSurveyConcept.test.ts",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'counts' does not exist on type '{ counts: number[]; } | { error: string; }'.\n  Property 'counts' does not exist on type '{ error: string; }'.",
+	"source": "deno-ts",
+	"startLineNumber": 197,
+	"startColumn": 25,
+	"endLineNumber": 197,
+	"endColumn": 31,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/dnj/Repos/concept_backend_play/src/concepts/LikertSurvey/LikertSurveyConcept.test.ts",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'sentiment' does not exist on type '{ sentiment: string; } | { error: string; }'.\n  Property 'sentiment' does not exist on type '{ error: string; }'.",
+	"source": "deno-ts",
+	"startLineNumber": 198,
+	"startColumn": 28,
+	"endLineNumber": 198,
+	"endColumn": 37,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/dnj/Repos/concept_backend_play/src/concepts/LikertSurvey/LikertSurveyConcept.test.ts",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'counts' does not exist on type '{ counts: number[]; } | { error: string; }'.\n  Property 'counts' does not exist on type '{ error: string; }'.",
+	"source": "deno-ts",
+	"startLineNumber": 203,
+	"startColumn": 63,
+	"endLineNumber": 203,
+	"endColumn": 69,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/dnj/Repos/concept_backend_play/src/concepts/LikertSurvey/LikertSurveyConcept.test.ts",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'sentiment' does not exist on type '{ sentiment: string; } | { error: string; }'.\n  Property 'sentiment' does not exist on type '{ error: string; }'.",
+	"source": "deno-ts",
+	"startLineNumber": 204,
+	"startColumn": 56,
+	"endLineNumber": 204,
+	"endColumn": 65,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/dnj/Repos/concept_backend_play/src/concepts/LikertSurvey/LikertSurveyConcept.test.ts",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'counts' does not exist on type '{ counts: number[]; } | { error: string; }'.\n  Property 'counts' does not exist on type '{ error: string; }'.",
+	"source": "deno-ts",
+	"startLineNumber": 205,
+	"startColumn": 25,
+	"endLineNumber": 205,
+	"endColumn": 31,
+	"origin": "extHost1"
+},{
+	"resource": "/Users/dnj/Repos/concept_backend_play/src/concepts/LikertSurvey/LikertSurveyConcept.test.ts",
+	"owner": "_generated_diagnostic_collection_name_#0",
+	"code": "2339",
+	"severity": 8,
+	"message": "Property 'sentiment' does not exist on type '{ sentiment: string; } | { error: string; }'.\n  Property 'sentiment' does not exist on type '{ error: string; }'.",
+	"source": "deno-ts",
+	"startLineNumber": 206,
+	"startColumn": 28,
+	"endLineNumber": 206,
+	"endColumn": 37,
+	"origin": "extHost1"
+}]
+# response:
 
-1.  **`console.log("Testing principle: Create survey, get responses, analyze sentiment")`**
-    *   The test begins, stating its intent to model the core scenario of the concept.
+# solution
 
-2.  **`const owner = "user:principle-owner" as User; ...`**
-    *   Actors are established: a survey `owner` and several `responders`.
+The provided test file has several TypeScript compilation errors. These errors stem from a single root cause: attempting to access properties on a union type without first using a type guard. The actions and queries in `LikertSurveyConcept` correctly return a union type that includes a potential `error` object (e.g., `{ survey: ID } | { error: string }`). The tests must verify that an error was not returned before accessing the properties of the success object.
 
-3.  **`await likertSurvey.createSurvey({ title: "Team Mood Check", owner })`**
-    *   **Action**: The `owner` creates a new survey to gauge team sentiment.
-    *   **State Change**: A `SurveyDoc` is created in the database, linked to the `owner`.
+Additionally, a formatting artifact `# trace:` was incorrectly included as a line of code in the test file, causing a syntax error.
 
-4.  **`await likertSurvey.addQuestion({ stem: "...", survey: surveyId })`**
-    *   **Action**: The `owner` adds a specific question to the survey.
-    *   **State Change**: A `QuestionDoc` is created, linked to the `surveyId`.
+The solution involves two changes:
+1.  Adding `assert("property" in result)` checks after each query and action call within the tests. This acts as a type guard, satisfying the TypeScript compiler that the property exists before it is accessed.
+2.  Removing the extraneous `# trace:` line from the file.
 
-5.  **`await likertSurvey.respondToQuestion(...)` (called 4 times)**
-    *   **Action**: Four different `responders` submit their choices (5, 4, 4, 2) for the question.
-    *   **State Change**: Four `ResponseDoc` entries are created, each linking a `responder`, the `questionId`, and their chosen value.
+Here is the corrected test file.
 
-6.  **`await likertSurvey._getQuestionResponseCounts({ question: questionId })`**
-    *   **Query**: The test queries for the aggregate distribution of responses.
-    *   **Verification**: The result `{ counts: [0, 1, 0, 2, 1] }` is checked. This confirms that the system correctly tallied one response for choice 2, two for choice 4, and one for choice 5. This directly demonstrates the aggregation purpose.
+# file: src/concepts/LikertSurvey/LikertSurveyConcept.test.ts
 
-7.  **`await likertSurvey._analyzeSentiment({ question: questionId })`**
-    *   **Query**: The test queries for the overall sentiment analysis.
-    *   **Verification**: The result `{ sentiment: "positive" }` is checked. Since the average score is 3.75 (which is greater than 3.5), the sentiment is correctly classified as positive. This fulfills the ultimate purpose of understanding group sentiment.
+```typescript
+import { assertEquals, assertExists, assert } from "jsr:@std/assert";
+import { testDb } from "@utils/database.ts";
+import { ID } from "@utils/types.ts";
+import LikertSurveyConcept from "./LikertSurveyConcept.ts";
 
-8.  **`console.log("Principle test successful...")`**
-    *   The test concludes, having successfully demonstrated the end-to-end flow described in the principle: from creation to response collection to insightful analysis.
+// Mock IDs for testing
+const userA = "user:Alice" as ID;
+const userB = "user:Bob" as ID;
+const userC = "user:Charlie" as ID;
+const nonExistentSurvey = "survey:nonExistent" as ID;
+const nonExistentQuestion = "question:nonExistent" as ID;
+
+Deno.test("LikertSurveyConcept: Action `createSurvey`", async (t) => {
+  const [db, client] = await testDb();
+  const likert = new LikertSurveyConcept(db);
+
+  await t.step("requires: title should be non-empty", async () => {
+    console.log("  - Testing requirement: title must be non-empty");
+    const res = await likert.createSurvey({ title: "", owner: userA });
+    assert("error" in res, "Expected an error for empty title");
+    assertEquals(res.error, "Title cannot be empty");
+  });
+
+  await t.step("effects: creates a survey and associates it with an owner", async () => {
+    console.log("  - Testing effect: successfully creates a survey");
+    const res = await likert.createSurvey({ title: "Team Morale", owner: userA });
+    assert("survey" in res, "Expected a survey ID on successful creation");
+    const { survey } = res;
+    assertExists(survey);
+
+    console.log("  - Verifying survey properties using queries...");
+    const [titleRes] = await likert._getSurveyTitle({ survey });
+    const [ownerRes] = await likert._getSurveyOwner({ survey });
+    const userSurveys = await likert._getUserSurveys({ user: userA });
+
+    assert("title" in titleRes, "Query for title should not fail");
+    assertEquals(titleRes.title, "Team Morale");
+    assert("owner" in ownerRes, "Query for owner should not fail");
+    assertEquals(ownerRes.owner, userA);
+
+    assertEquals(userSurveys.length, 1);
+    const [userSurvey] = userSurveys;
+    assert("survey" in userSurvey, "Query for user surveys should not fail");
+    assertEquals(userSurvey.survey, survey);
+  });
+
+  await client.close();
+});
+
+Deno.test("LikertSurveyConcept: Action `addQuestion`", async (t) => {
+  const [db, client] = await testDb();
+  const likert = new LikertSurveyConcept(db);
+  const { survey } = await likert.createSurvey({ title: "Team Morale", owner: userA }) as { survey: ID };
+
+  await t.step("requires: stem should be non-empty", async () => {
+    console.log("  - Testing requirement: stem must be non-empty");
+    const res = await likert.addQuestion({ stem: "", survey });
+    assert("error" in res, "Expected an error for empty stem");
+    assertEquals(res.error, "Question stem cannot be empty");
+  });
+
+  await t.step("requires: survey must exist", async () => {
+    console.log("  - Testing requirement: survey must exist");
+    const res = await likert.addQuestion({ stem: "A valid question", survey: nonExistentSurvey });
+    assert("error" in res, "Expected an error for non-existent survey");
+    assertEquals(res.error, "Survey not found");
+  });
+
+  await t.step("effects: creates a question and associates it with a survey", async () => {
+    console.log("  - Testing effect: successfully creates a question");
+    const res = await likert.addQuestion({ stem: "How is the work-life balance?", survey });
+    assert("question" in res, "Expected a question ID on successful creation");
+    const { question } = res;
+    assertExists(question);
+
+    console.log("  - Verifying question properties using queries...");
+    const [stemRes] = await likert._getQuestionStem({ question });
+    const surveyQuestions = await likert._getSurveyQuestions({ survey });
+
+    assert("stem" in stemRes, "Query for stem should not fail");
+    assertEquals(stemRes.stem, "How is the work-life balance?");
+
+    assertEquals(surveyQuestions.length, 1);
+    const [surveyQuestion] = surveyQuestions;
+    assert("question" in surveyQuestion, "Query for survey questions should not fail");
+    assertEquals(surveyQuestion.question, question);
+  });
+
+  await client.close();
+});
+
+Deno.test("LikertSurveyConcept: Action `respondToQuestion`", async (t) => {
+  const [db, client] = await testDb();
+  const likert = new LikertSurveyConcept(db);
+  const { survey } = await likert.createSurvey({ title: "Product Feedback", owner: userA }) as { survey: ID };
+  const { question } = await likert.addQuestion({ stem: "Is the UI intuitive?", survey }) as { question: ID };
+
+  await t.step("requires: question must exist", async () => {
+    console.log("  - Testing requirement: question must exist");
+    const res = await likert.respondToQuestion({ question: nonExistentQuestion, responder: userB, choice: 5 });
+    assert("error" in res, "Expected an error for non-existent question");
+    assertEquals(res.error, "Question not found");
+  });
+
+  await t.step("requires: choice must be an integer between 1 and 5", async () => {
+    console.log("  - Testing requirement: choice must be an integer 1-5");
+    const invalidChoices = [0, 6, 3.5, -1];
+    for (const choice of invalidChoices) {
+      const res = await likert.respondToQuestion({ question, responder: userB, choice });
+      assert("error" in res, `Expected an error for choice ${choice}`);
+      assertEquals(res.error, "Choice must be an integer between 1 and 5");
+    }
+  });
+
+  await t.step("effects: creates a response and can overwrite a previous one", async () => {
+    console.log("  - Testing effect: user B responds with choice 4");
+    const res1 = await likert.respondToQuestion({ question, responder: userB, choice: 4 });
+    assert(!("error" in res1), "Should successfully create a response");
+
+    let [countsRes1] = await likert._getQuestionResponseCounts({ question });
+    assert("counts" in countsRes1, "Query for counts should not fail");
+    assertEquals(countsRes1.counts, [0, 0, 0, 1, 0]);
+
+    console.log("  - Testing effect: user B changes response to choice 5");
+    const res2 = await likert.respondToQuestion({ question, responder: userB, choice: 5 });
+    assert(!("error" in res2), "Should successfully overwrite the response");
+
+    let [countsRes2] = await likert._getQuestionResponseCounts({ question });
+    assert("counts" in countsRes2, "Query for counts should not fail after overwrite");
+    assertEquals(countsRes2.counts, [0, 0, 0, 0, 1], "Previous response should be removed");
+  });
+
+  await client.close();
+});
+
+Deno.test("LikertSurveyConcept: Action `removeQuestion`", async (t) => {
+  const [db, client] = await testDb();
+  const likert = new LikertSurveyConcept(db);
+  const { survey } = await likert.createSurvey({ title: "Workshop Feedback", owner: userA }) as { survey: ID };
+  const { question } = await likert.addQuestion({ stem: "Was the content useful?", survey }) as { question: ID };
+  await likert.respondToQuestion({ question, responder: userB, choice: 5 });
+  await likert.respondToQuestion({ question, responder: userC, choice: 4 });
+
+  await t.step("requires: question must exist", async () => {
+    console.log("  - Testing requirement: question must exist");
+    const res = await likert.removeQuestion({ question: nonExistentQuestion });
+    assert("error" in res, "Expected an error for non-existent question");
+    assertEquals(res.error, "Question not found");
+  });
+
+  await t.step("effects: removes the question and its associated responses", async () => {
+    console.log("  - Verifying state before removal...");
+    assertEquals((await likert._getSurveyQuestions({ survey })).length, 1);
+    const [countsBefore] = await likert._getQuestionResponseCounts({ question });
+    assert("counts" in countsBefore, "Query for counts should not fail");
+    assertEquals(countsBefore.counts, [0, 0, 0, 1, 1]);
+
+    console.log("  - Testing effect: removing the question");
+    const res = await likert.removeQuestion({ question });
+    assert(!("error" in res), "Should successfully remove the question");
+
+    console.log("  - Verifying state after removal...");
+    assertEquals((await likert._getSurveyQuestions({ survey })).length, 0);
+    // Querying for the removed question should now fail
+    const [stemAfter] = await likert._getQuestionStem({ question });
+    assert("error" in stemAfter, "Querying a deleted question should fail");
+  });
+
+  await client.close();
+});
+
+Deno.test("LikertSurveyConcept: Principle Test", async () => {
+  console.log("Principle: An owner creates a survey, users respond, and the owner analyzes sentiment.");
+  const [db, client] = await testDb();
+  const likert = new LikertSurveyConcept(db);
+
+  console.log("\n1. Alice (owner) creates a 'Team Satisfaction' survey.");
+  const surveyRes = await likert.createSurvey({ title: "Team Satisfaction", owner: userA });
+  assert("survey" in surveyRes, "Survey creation should succeed");
+  const { survey } = surveyRes;
+  assertExists(survey);
+
+  console.log("\n2. Alice adds two questions to the survey.");
+  const q1Res = await likert.addQuestion({ stem: "Are you happy with the work-life balance?", survey });
+  assert("question" in q1Res, "Adding Q1 should succeed");
+  const { question: q1 } = q1Res;
+
+  const q2Res = await likert.addQuestion({ stem: "Is the project challenging enough?", survey });
+  assert("question" in q2Res, "Adding Q2 should succeed");
+  const { question: q2 } = q2Res;
+  assertExists(q1);
+  assertExists(q2);
+
+  console.log("\n3. Other users (Bob and Charlie) respond to the questions.");
+  console.log("  - Bob responds to Q1 ('work-life balance') with 5 (Strongly Agree).");
+  await likert.respondToQuestion({ question: q1, responder: userB, choice: 5 });
+  console.log("  - Charlie responds to Q1 ('work-life balance') with 4 (Agree).");
+  await likert.respondToQuestion({ question: q1, responder: userC, choice: 4 });
+  console.log("  - Bob responds to Q2 ('challenging enough') with 1 (Strongly Disagree).");
+  await likert.respondToQuestion({ question: q2, responder: userB, choice: 1 });
+  console.log("  - Charlie responds to Q2 ('challenging enough') with 5 (Strongly Agree).");
+  await likert.respondToQuestion({ question: q2, responder: userC, choice: 5 });
+
+  console.log("\n4. Alice analyzes the results.");
+
+  console.log("\n  - Analyzing Q1: 'Are you happy with the work-life balance?'");
+  const [countsQ1] = await likert._getQuestionResponseCounts({ question: q1 });
+  const [sentimentQ1] = await likert._analyzeSentiment({ question: q1 });
+  assert("counts" in countsQ1, "Query for Q1 counts should not fail");
+  assert("sentiment" in sentimentQ1, "Query for Q1 sentiment should not fail");
+  console.log(`    Response counts: ${JSON.stringify(countsQ1.counts)}`);
+  console.log(`    Calculated sentiment: ${sentimentQ1.sentiment}`);
+  assertEquals(countsQ1.counts, [0, 0, 0, 1, 1]);
+  assertEquals(sentimentQ1.sentiment, "positive");
+
+  console.log("\n  - Analyzing Q2: 'Is the project challenging enough?'");
+  const [countsQ2] = await likert._getQuestionResponseCounts({ question: q2 });
+  const [sentimentQ2] = await likert._analyzeSentiment({ question: q2 });
+  assert("counts" in countsQ2, "Query for Q2 counts should not fail");
+  assert("sentiment" in sentimentQ2, "Query for Q2 sentiment should not fail");
+  console.log(`    Response counts: ${JSON.stringify(countsQ2.counts)}`);
+  console.log(`    Calculated sentiment: ${sentimentQ2.sentiment}`);
+  assertEquals(countsQ2.counts, [1, 0, 0, 0, 1]);
+  assertEquals(sentimentQ2.sentiment, "bimodal"); // Avg is 3, std dev is 2 > 1.5
+
+  console.log("\nPrinciple successfully demonstrated.");
+  await client.close();
+});
+```
