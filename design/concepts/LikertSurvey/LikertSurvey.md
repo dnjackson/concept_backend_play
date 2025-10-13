@@ -64,14 +64,14 @@ This query analyzes all responses for a given `question` and returns a string in
     *   If the standard deviation is greater than 1.5 (indicating a high degree of variance and polarization), return "bimodal".
     *   Otherwise, return "mixed".
 
-\_getSurveyQuestions (survey: Survey): (questions: set of Question)
+\_getSurveyQuestions (survey: Survey): \[questions: Question\]
 **requires** the given survey exists
-**effects** returns the set of all `Question` entities whose `survey` field matches the input `survey`
+**effects** returns an array of `Question` identities whose `survey` field matches the input `survey`
 
-\_getQuestionResponseCounts (question: Question): (counts: array of Number)
+\_getQuestionResponseCounts (question: Question): \[counts: Number\[\]\]
 **requires** the given question exists
 **effects** returns an array of counts of responses by choice number (that is, the nth element is the number of responses with choice n+1)
 
-\_getUserSurveys (user: User): (surveys: set of Survey)
+\_getUserSurveys (user: User): \[surveys: Survey\]
 **requires** the given user exists
-**effects** returns the set of all `Survey` entities where the `owner` field matches the input `user`
+**effects** returns an array of all `Survey` identities where the `owner` field matches the input `user`

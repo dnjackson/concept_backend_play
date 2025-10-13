@@ -1,9 +1,7 @@
 {
     "imports": {
         "@concepts/": "./src/concepts/",
-        "@utils/": "./src/utils/",
-        "jsr:@std/": "https://deno.land/std@1.1.2/",
-        "jsr:@hono/": "https://esm.sh/@hono/"
+        "@utils/": "./src/utils/"
     },
     "tasks": {
         "concepts": "deno run --allow-net --allow-read --allow-sys --allow-env src/concept_server.ts --port 8000 --baseUrl /api"

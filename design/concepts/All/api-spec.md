@@ -1,3 +1,4 @@
+
 # API Specification: LikertSurvey Concept
 
 **Purpose:** understand group sentiment on a set of topics by aggregating quantitative feedback
@@ -8,7 +9,7 @@
 
 ### POST /api/LikertSurvey/createSurvey
 
-**Description:** Creates a new survey with a title and an owner.
+**Description:** Creates a new survey with a specified title and owner.
 
 **Requirements:**
 - `title` is non-empty
@@ -20,14 +21,14 @@
 ```json
 {
   "title": "string",
-  "owner": "User"
+  "owner": "ID"
 }
 ```
 
 **Success Response Body (Action):**
 ```json
 {
-  "survey": "Survey"
+  "survey": "ID"
 }
 ```
 
@@ -43,7 +44,8 @@
 **Description:** Adds a new question to an existing survey.
 
 **Requirements:**
-- `stem` is non-empty and `survey` exists
+- `stem` is non-empty
+- `survey` exists
 
 **Effects:**
 - Creates a new `Question` with the given stem, associates it with the given survey, and returns it.
@@ -52,14 +54,14 @@
 ```json
 {
   "stem": "string",
-  "survey": "Survey"
+  "survey": "ID"
 }
 ```
 
 **Success Response Body (Action):**
 ```json
 {
-  "question": "Question"
+  "question": "ID"
 }
 ```
 
@@ -72,7 +74,7 @@
 ---
 ### POST /api/LikertSurvey/removeQuestion
 
-**Description:** Removes a question and all its associated responses from a survey.
+**Description:** Removes a specified question and all of its associated responses.
 
 **Requirements:**
 - `question` exists
@@ -83,7 +85,7 @@
 **Request Body:**
 ```json
 {
-  "question": "Question"
+  "question": "ID"
 }
 ```
 
@@ -101,22 +103,22 @@
 ---
 ### POST /api/LikertSurvey/respondToQuestion
 
-**Description:** Submits or updates a user's response to a specific question.
+**Description:** Records a user's response to a survey question. Replaces any previous response from the same user for the same question.
 
 **Requirements:**
 - `question` exists
 - `choice` is an integer between 1 and 5
 
 **Effects:**
-- Deletes any existing response to this question.
-- Creates a new `Response` linking the responder, question, and choice.
+- Deletes any existing response to this question from the given `responder`.
+- Creates a new `Response` linking the `responder`, `question`, and `choice`.
 
 **Request Body:**
 ```json
 {
-  "question": "Question",
-  "responder": "User",
-  "choice": "Number"
+  "question": "ID",
+  "responder": "ID",
+  "choice": "number"
 }
 ```
 
@@ -134,18 +136,18 @@
 ---
 ### POST /api/LikertSurvey/_getSurveyQuestions
 
-**Description:** Retrieves all questions associated with a specific survey.
+**Description:** Retrieves a list of all questions associated with a given survey.
 
 **Requirements:**
 - The given `survey` exists.
 
 **Effects:**
-- Returns the set of all `Question` entities whose `survey` field matches the input `survey`.
+- Returns the array of all `Question` identities whose `survey` field matches the input `survey`.
 
 **Request Body:**
 ```json
 {
-  "survey": "Survey"
+  "survey": "ID"
 }
 ```
 
@@ -153,7 +155,9 @@
 ```json
 [
   {
-    "questions": "array of Question"
+    "questions": [
+      "ID"
+    ]
   }
 ]
 ```
@@ -167,18 +171,18 @@
 ---
 ### POST /api/LikertSurvey/_getQuestionResults
 
-**Description:** Gets the response counts for each choice (1-5) for a given question.
+**Description:** Retrieves the aggregated response counts for a specific question.
 
 **Requirements:**
 - `question` exists
 
 **Effects:**
-- Returns a map where each key is a choice value (e.g., 1-5) and its value is the count of Responses for this question with that choice.
+- Returns a map where each key is a choice value (1-5) and its value is the count of responses for this question with that choice.
 
 **Request Body:**
 ```json
 {
-  "question": "Question"
+  "question": "ID"
 }
 ```
 
@@ -186,7 +190,13 @@
 ```json
 [
   {
-    "results": "map of Number to Number"
+    "results": {
+      "1": "number",
+      "2": "number",
+      "3": "number",
+      "4": "number",
+      "5": "number"
+    }
   }
 ]
 ```
@@ -200,18 +210,24 @@
 ---
 ### POST /api/LikertSurvey/_analyzeSentiment
 
-**Description:** Analyzes the responses for a question to determine the overall sentiment.
+**Description:** Analyzes all responses for a given question and returns a string indicating the overall sentiment.
 
 **Requirements:**
-- None specified.
+- The given `question` exists.
 
 **Effects:**
-- This query analyzes all responses for a given `question` and returns a string indicating the overall sentiment ("positive", "negative", "bimodal", "mixed", or "neutral").
+- Analyzes all responses for the question.
+- If no responses, returns "neutral".
+- Calculates average and standard deviation of scores.
+- Returns "positive" if average > 3.5.
+- Returns "negative" if average < 2.5.
+- Returns "bimodal" if standard deviation > 1.5 (highest priority).
+- Otherwise, returns "mixed".
 
 **Request Body:**
 ```json
 {
-  "question": "Question"
+  "question": "ID"
 }
 ```
 
@@ -233,18 +249,18 @@
 ---
 ### POST /api/LikertSurvey/_getQuestionResponseCounts
 
-**Description:** Returns an array of response counts for a question, indexed by choice.
+**Description:** Retrieves an array of response counts for a question, indexed by choice.
 
 **Requirements:**
 - The given `question` exists.
 
 **Effects:**
-- Returns an array of counts of responses by choice number (that is, the nth element is the number of responses with choice n+1).
+- Returns an array of counts of responses by choice number (the nth element is the number of responses with choice n+1).
 
 **Request Body:**
 ```json
 {
-  "question": "Question"
+  "question": "ID"
 }
 ```
 
@@ -252,7 +268,9 @@
 ```json
 [
   {
-    "counts": "array of Number"
+    "counts": [
+      "number"
+    ]
   }
 ]
 ```
@@ -272,12 +290,12 @@
 - The given `user` exists.
 
 **Effects:**
-- Returns the set of all `Survey` entities where the `owner` field matches the input `user`.
+- Returns the set of all `Survey` identities where the `owner` field matches the input `user`.
 
 **Request Body:**
 ```json
 {
-  "user": "User"
+  "user": "ID"
 }
 ```
 
@@ -285,7 +303,9 @@
 ```json
 [
   {
-    "surveys": "array of Survey"
+    "surveys": [
+      "ID"
+    ]
   }
 ]
 ```
@@ -308,7 +328,7 @@
 
 ### POST /api/UserAuth/register
 
-**Description:** Creates a new user account with the provided username and password.
+**Description:** Registers a new user with a unique username and password.
 
 **Requirements:**
 - No user exists with the given `username`.
@@ -317,8 +337,7 @@
 - A new `User` is created.
 - The new user's `username` is set to the input `username`.
 - The new user's `password` is set to the input `password`.
-- The new `user` is returned.
-- If a user already exists with the given username, an error is returned.
+- The new `user` ID is returned.
 
 **Request Body:**
 ```json
@@ -331,7 +350,7 @@
 **Success Response Body (Action):**
 ```json
 {
-  "user": "User"
+  "user": "ID"
 }
 ```
 
@@ -344,7 +363,7 @@
 ---
 ### POST /api/UserAuth/login
 
-**Description:** Authenticates a user and returns a session token.
+**Description:** Authenticates a user with their credentials and returns a session token.
 
 **Requirements:**
 - A user `u` exists where `u.username` matches the input `username` and `u.password` matches the input `password`.
@@ -353,7 +372,6 @@
 - A new, unique `token` string is generated.
 - A new `Session` is created, linking the new `token` to the user `u`.
 - The `token` is returned.
-- If credentials do not match an existing user, an error is returned.
 
 **Request Body:**
 ```json
@@ -408,14 +426,13 @@
 ---
 ### POST /api/UserAuth/_getUserFromToken
 
-**Description:** Retrieves the user ID associated with a session token.
+**Description:** Retrieves the user ID associated with a valid session token.
 
 **Requirements:**
 - A session `s` exists with the given `token`.
 
 **Effects:**
-- Returns the user associated with session `s`.
-- If no session exists with the given token, an error is returned.
+- Returns the user ID associated with session `s`.
 
 **Request Body:**
 ```json
@@ -428,7 +445,7 @@
 ```json
 [
   {
-    "user": "User"
+    "user": "ID"
   }
 ]
 ```
@@ -442,14 +459,13 @@
 ---
 ### POST /api/UserAuth/_getUsernameFromToken
 
-**Description:** Retrieves the username associated with a session token.
+**Description:** Retrieves the username associated with a valid session token.
 
 **Requirements:**
 - A session `s` exists with the given `token`.
 
 **Effects:**
 - Returns the username of the user associated with session `s`.
-- If no session exists with the given token, an error is returned.
 
 **Request Body:**
 ```json

@@ -2,12 +2,8 @@ import { Collection, Db } from "npm:mongodb";
 import { Empty, ID } from "@utils/types.ts";
 import { freshID } from "@utils/database.ts";
 
-const PREFIX = "LikertSurvey" + ".";
-
-// Generic types of this concept
+// Define the generic and entity types for the concept
 type User = ID;
-
-// Concept-specific types
 type Survey = ID;
 type Question = ID;
 type Response = ID;
@@ -47,14 +43,16 @@ interface ResponseDoc {
   choice: number;
 }
 
+const PREFIX = "LikertSurvey" + ".";
+
 /**
- * @concept LikertSurvey
- * @purpose understand group sentiment on a set of topics by aggregating quantitative feedback
+ * concept: LikertSurvey
+ * purpose: understand group sentiment on a set of topics by aggregating quantitative feedback
  */
 export default class LikertSurveyConcept {
-  surveys: Collection<SurveyDoc>;
-  questions: Collection<QuestionDoc>;
-  responses: Collection<ResponseDoc>;
+  public readonly surveys: Collection<SurveyDoc>;
+  public readonly questions: Collection<QuestionDoc>;
+  public readonly responses: Collection<ResponseDoc>;
 
   constructor(private readonly db: Db) {
     this.surveys = this.db.collection(PREFIX + "surveys");
@@ -62,69 +60,80 @@ export default class LikertSurveyConcept {
     this.responses = this.db.collection(PREFIX + "responses");
   }
 
+  // Actions
+
   /**
    * createSurvey (title: String, owner: User): (survey: Survey)
    *
    * **requires** title is non-empty
+   *
    * **effects** creates a new `Survey` with the given title and owner and returns it
    */
   async createSurvey(
     { title, owner }: { title: string; owner: User },
   ): Promise<{ survey: Survey } | { error: string }> {
     if (!title) {
-      return { error: "Survey title cannot be empty." };
+      return { error: "Title cannot be empty" };
     }
 
-    const survey: SurveyDoc = {
-      _id: freshID(),
+    const surveyId = freshID() as Survey;
+    const surveyDoc: SurveyDoc = {
+      _id: surveyId,
       title,
       owner,
     };
-    await this.surveys.insertOne(survey);
-    return { survey: survey._id };
+
+    await this.surveys.insertOne(surveyDoc);
+    return { survey: surveyId };
   }
 
   /**
    * addQuestion (stem: String, survey: Survey): (question: Question)
    *
    * **requires** stem is non-empty and survey exists
+   *
    * **effects** creates a new `Question` with the given stem, associates it with the given survey, and returns it
    */
   async addQuestion(
     { stem, survey }: { stem: string; survey: Survey },
   ): Promise<{ question: Question } | { error: string }> {
     if (!stem) {
-      return { error: "Question stem cannot be empty." };
-    }
-    const parentSurvey = await this.surveys.findOne({ _id: survey });
-    if (!parentSurvey) {
-      return { error: "Survey not found." };
+      return { error: "Question stem cannot be empty" };
     }
 
-    const question: QuestionDoc = {
-      _id: freshID(),
+    const surveyExists = await this.surveys.findOne({ _id: survey });
+    if (!surveyExists) {
+      return { error: `Survey with id ${survey} not found` };
+    }
+
+    const questionId = freshID() as Question;
+    const questionDoc: QuestionDoc = {
+      _id: questionId,
       stem,
       survey,
     };
-    await this.questions.insertOne(question);
-    return { question: question._id };
+
+    await this.questions.insertOne(questionDoc);
+    return { question: questionId };
   }
 
   /**
    * removeQuestion (question: Question)
    *
    * **requires** question exists
+   *
    * **effects** removes the specified question and all `Response` entities associated with it
    */
   async removeQuestion(
     { question }: { question: Question },
   ): Promise<Empty | { error: string }> {
-    const questionDoc = await this.questions.findOne({ _id: question });
-    if (!questionDoc) {
-      return { error: "Question not found." };
+    const deleteQuestionResult = await this.questions.deleteOne({
+      _id: question,
+    });
+    if (deleteQuestionResult.deletedCount === 0) {
+      return { error: `Question with id ${question} not found` };
     }
 
-    await this.questions.deleteOne({ _id: question });
     await this.responses.deleteMany({ question: question });
 
     return {};
@@ -133,8 +142,13 @@ export default class LikertSurveyConcept {
   /**
    * respondToQuestion (question: Question, responder: User, choice: Number)
    *
-   * **requires** question exists; choice is an integer between 1 and 5
-   * **effects** deletes any existing response to this question by the responder; creates a new `Response` linking the responder, question, and choice
+   * **requires**
+   *   - question exists
+   *   - choice is an integer between 1 and 5
+   *
+   * **effects**
+   *   - delete any existing response to this question
+   *   - creates a new `Response` linking the responder, question, and choice
    */
   async respondToQuestion(
     { question, responder, choice }: {
@@ -144,90 +158,86 @@ export default class LikertSurveyConcept {
     },
   ): Promise<Empty | { error: string }> {
     if (!Number.isInteger(choice) || choice < 1 || choice > 5) {
-      return { error: "Choice must be an integer between 1 and 5." };
-    }
-    const questionDoc = await this.questions.findOne({ _id: question });
-    if (!questionDoc) {
-      return { error: "Question not found." };
+      return { error: "Choice must be an integer between 1 and 5" };
     }
 
-    // Delete any previous response from this user for this question
+    const questionExists = await this.questions.findOne({ _id: question });
+    if (!questionExists) {
+      return { error: `Question with id ${question} not found` };
+    }
+
+    // Delete previous response if it exists
     await this.responses.deleteMany({ question, responder });
 
-    const response: ResponseDoc = {
-      _id: freshID(),
+    const responseId = freshID() as Response;
+    const responseDoc: ResponseDoc = {
+      _id: responseId,
       responder,
       question,
       choice,
     };
-    await this.responses.insertOne(response);
+
+    await this.responses.insertOne(responseDoc);
     return {};
   }
 
+  // Queries
+
   /**
-   * _getSurveyQuestions (survey: Survey): (questions: set of Question)
+   * _getSurveyQuestions (survey: Survey): [questions: Question]
    *
    * **requires** the given survey exists
-   * **effects** returns the set of all `Question` entities whose `survey` field matches the input `survey`
+   *
+   * **effects** returns an array of `Question` identities whose `survey` field matches the input `survey`
    */
   async _getSurveyQuestions(
     { survey }: { survey: Survey },
-  ): Promise<QuestionDoc[]> {
-    const surveyDoc = await this.surveys.findOne({ _id: survey });
-    if (!surveyDoc) {
-      return [];
+  ): Promise<{ questions: Question }[] | { error: string }> {
+    const surveyExists = await this.surveys.findOne({ _id: survey });
+    if (!surveyExists) {
+      return { error: `Survey with id ${survey} not found` };
     }
-    return await this.questions.find({ survey }).toArray();
+
+    const questionDocs = await this.questions.find({ survey }).toArray();
+    return questionDocs.map((q) => ({ questions: q._id }));
   }
 
   /**
    * _getQuestionResults (question: Question): (results: map of Number to Number)
    *
    * **requires** question exists
+   *
    * **effects** returns a map where each key is a choice value (e.g., 1-5) and its value is the count of Responses for this question with that choice
    */
   async _getQuestionResults(
     { question }: { question: Question },
-  ): Promise<Array<Record<number, number>>> {
-    const questionDoc = await this.questions.findOne({ _id: question });
-    if (!questionDoc) {
-      return [];
+  ): Promise<{ results: Record<number, number> }[] | { error: string }> {
+    const questionExists = await this.questions.findOne({ _id: question });
+    if (!questionExists) {
+      return { error: `Question with id ${question} not found` };
     }
 
-    const pipeline = [
-      { $match: { question } },
-      { $group: { _id: "$choice", count: { $sum: 1 } } },
-    ];
-
-    const results = await this.responses.aggregate<
-      { _id: number; count: number }
-    >(pipeline).toArray();
-    const responseMap: Record<number, number> = {};
-    for (const result of results) {
-      responseMap[result._id] = result.count;
-    }
-
-    // Ensure all choices 1-5 are present, even if their count is 0
-    for (let i = 1; i <= 5; i++) {
-      if (!responseMap[i]) {
-        responseMap[i] = 0;
+    const responses = await this.responses.find({ question }).toArray();
+    const results: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    for (const response of responses) {
+      if (results[response.choice] !== undefined) {
+        results[response.choice]++;
       }
     }
-    return [responseMap];
+    return [{ results }];
   }
 
   /**
    * _analyzeSentiment (question: Question): (sentiment: String)
    *
-   * **effects** analyzes all responses for a given `question` and returns a string indicating the overall sentiment.
+   * **effects** This query analyzes all responses for a given `question` and returns a string indicating the overall sentiment.
    */
   async _analyzeSentiment(
     { question }: { question: Question },
-  ): Promise<Array<{ sentiment: string }>> {
-    const questionDoc = await this.questions.findOne({ _id: question });
-    if (!questionDoc) {
-      // Per spec, no responses means neutral. An invalid question has no responses.
-      return [{ sentiment: "neutral" }];
+  ): Promise<{ sentiment: string }[] | { error: string }> {
+    const questionExists = await this.questions.findOne({ _id: question });
+    if (!questionExists) {
+      return { error: `Question with id ${question} not found` };
     }
 
     const responses = await this.responses.find({ question }).toArray();
@@ -238,17 +248,17 @@ export default class LikertSurveyConcept {
     }
 
     const n = scores.length;
-    const mean = scores.reduce((a, b) => a + b) / n;
+    const mean = scores.reduce((a, b) => a + b, 0) / n;
     const variance =
-      scores.map((x) => Math.pow(x - mean, 2)).reduce((a, b) => a + b) / n;
-    const stdDev = Math.sqrt(variance);
+      scores.map((x) => Math.pow(x - mean, 2)).reduce((a, b) => a + b, 0) / n;
+    const stddev = Math.sqrt(variance);
 
     let sentiment: string;
     if (mean > 3.5) {
       sentiment = "positive";
     } else if (mean < 2.5) {
       sentiment = "negative";
-    } else if (stdDev > 1.5) {
+    } else if (stddev > 1.5) {
       sentiment = "bimodal";
     } else {
       sentiment = "mixed";
@@ -258,44 +268,48 @@ export default class LikertSurveyConcept {
   }
 
   /**
-   * _getQuestionResponseCounts (question: Question): (counts: array of Number)
+   * _getQuestionResponseCounts (question: Question): [counts: Number[]]
    *
    * **requires** the given question exists
+   *
    * **effects** returns an array of counts of responses by choice number (that is, the nth element is the number of responses with choice n+1)
    */
   async _getQuestionResponseCounts(
     { question }: { question: Question },
-  ): Promise<Array<number[]>> {
-    const questionDoc = await this.questions.findOne({ _id: question });
-    if (!questionDoc) {
-      return [];
+  ): Promise<{ counts: number[] }[] | { error: string }> {
+    const questionExists = await this.questions.findOne({ _id: question });
+    if (!questionExists) {
+      return { error: `Question with id ${question} not found` };
     }
 
-    const pipeline = [
-      { $match: { question } },
-      { $group: { _id: "$choice", count: { $sum: 1 } } },
-    ];
-
-    const results = await this.responses.aggregate<
-      { _id: number; count: number }
-    >(pipeline).toArray();
+    const aggregationResult = await this.responses
+      .aggregate<{ _id: number; count: number }>([
+        { $match: { question } },
+        { $group: { _id: "$choice", count: { $sum: 1 } } },
+      ])
+      .toArray();
 
     const counts = [0, 0, 0, 0, 0];
-    for (const result of results) {
-      // result._id is the choice (1-5)
-      counts[result._id - 1] = result.count;
+    for (const group of aggregationResult) {
+      if (group._id >= 1 && group._id <= 5) {
+        counts[group._id - 1] = group.count;
+      }
     }
 
-    return [counts];
+    return [{ counts }];
   }
 
   /**
-   * _getUserSurveys (user: User): (surveys: set of Survey)
+   * _getUserSurveys (user: User): [surveys: Survey]
    *
    * **requires** the given user exists
-   * **effects** returns the set of all `Survey` entities where the `owner` field matches the input `user`
+   *
+   * **effects** returns an array of all `Survey` identities where the `owner` field matches the input `user`
    */
-  async _getUserSurveys({ user }: { user: User }): Promise<SurveyDoc[]> {
-    return await this.surveys.find({ owner: user }).toArray();
+  async _getUserSurveys(
+    { user }: { user: User },
+  ): Promise<{ surveys: Survey }[] | { error: string }> {
+    const surveyDocs = await this.surveys.find({ owner: user }).toArray();
+    return surveyDocs.map((s) => ({ surveys: s._id }));
   }
 }

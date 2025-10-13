@@ -186,21 +186,24 @@ In concept specs, in contrast, *preconditions are firing conditions*. This means
 
 ## Concept queries
 
-Queries are reads of the concept state. Explicit query specifications are often not required since the concept state is assumed to be visible, so that straightforward queries of the state do not need to be defined in advance. It can be useful, though, to define queries for particularly significant and non-trivial observations of the state. For example, for a *UserProfile* concept with this state
+Queries are reads of the concept state. Explicit query specifications are often not used at the design level, but in specifications of concepts for code all queries that are likely to be needed should be specified.
+For example, for a *UserProfile* concept with this state
 
 	a set of Users with
 	  a bio String
 	  a thumbnail Image
 
-one would not define a query to extract the bio of a user. But for a *Friend* concept with this state
+one would define a query to extract the bio of a user, and a query to return the thumbnail image. Sometimes more complex queries are useful. For example, for a *Friend* concept with this state
 
 	a set of Users with
 	  a friends set of Users
 
 one might define a query that tells you, given two users, how many mutual friends they have:
 
-  \_countMutualFriends (u1: User, u2: User): (count: Number)
+  \_countMutualFriends (u1: User, u2: User): \[count: Number\]
   **effects** return number of mutual friends of users u1 and u2
+
+Note that a query always, by convention, returns an array of results.
 
 ## Concepts are not objects
 
